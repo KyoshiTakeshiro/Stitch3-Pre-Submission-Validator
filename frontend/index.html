@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stitch3 Validator</title>
+<link rel="icon" type="image/png" href="/assets/favicon-new.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500&display=swap" rel="stylesheet">
+<style>
+  /*
+    Design tokens copied from stitch3.ai's compiled CSS custom properties
+    (Stitch3 is "by Bitcast" — same brand family). Pulled via computed-style
+    inspection of the live site, not guessed. Re-pull if the brand refreshes.
+  */
+  :root {
+    color-scheme: dark;
+    --black-0: #050507;
+    --black-1: #0a0a0c;
+    --black-2: #131317;
+    --gray-100: #f1f5f9;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6c7280;
+    --purple: #b882ff;
+    --purple-light: #cba3ff;
+    --gradient-brand: linear-gradient(105deg, #ded2d7 0%, #b882ff 100%);
+    --green: #34d399;
+    --red: #f87171;
+    --border-card: #ffffff1a;
+    --border-input: #ffffff1f;
+    --border-accent: #b882ff59;
+    --glow-accent-soft: 0 0 16px #b882ff4d;
+    --radius-control: 8px;
+    --radius-input: 6px;
+    --radius-pill: 999px;
+    --font-display: "Satoshi", "Inter", sans-serif;
+    --font-body: "Inter", -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+    --tracking-label: .14em;
+    --tracking-cta: .02em;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { overflow-x: hidden; }
+  body {
+    font-family: var(--font-body);
+    background: var(--black-0);
+    color: var(--gray-400);
+    line-height: 1.5;
+    margin: 0;
+    padding: 48px 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+  /* Hero glow asset lifted from stitch3.ai's hero section. Extended further down
+     the page (their client-portal page carries the glow well past the header,
+     not just behind it) so the page doesn't go flat black right under the intro. */
+  body::before {
+    content: "";
+    position: absolute;
+    top: -160px;
+    left: 50%;
+    width: max(1400px, 120vw);
+    max-width: 220vw;
+    height: 1000px;
+    transform: translateX(-50%);
+    background-image: url("/assets/hero-background.png");
+    background-size: cover;
+    background-position: center top;
+    -webkit-mask-image: linear-gradient(black 55%, transparent 98%);
+    mask-image: linear-gradient(black 55%, transparent 98%);
+    opacity: 0.8;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page { max-width: 640px; margin: 0 auto; position: relative; z-index: 1; animation: glide-in 1.2s ease-out; }
+  @keyframes glide-in {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .page { animation: none; }
+  }
+
+  .site-header {
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+  }
+  .header-logo { height: 72px; width: auto; margin-bottom: 40px; display: block; align-self: flex-start; }
+  .header-meta { display: flex; flex-direction: column; gap: 2px; }
+  .kicker {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 32px;
+    color: var(--gray-100);
+    letter-spacing: -0.01em;
+  }
+  .disclaimer { font-size: 12px; color: var(--gray-500); }
+
+  .intro { margin: 20px 0 28px; font-size: 15px; color: var(--gray-400); }
+
+  .card {
+    background: var(--black-1);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    padding: 28px;
+    box-shadow: 0 8px 48px #0009, 0 0 64px #b882ff14;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin-top: 24px;
+    margin-bottom: 10px;
+  }
+  .card > .field-label:first-child { margin-top: 0; }
+
+  select, textarea {
+    width: 100%;
+    padding: 11px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    border-radius: var(--radius-input);
+    border: 1px solid var(--border-input);
+    background: var(--black-2);
+    color: var(--gray-100);
+    outline: none;
+  }
+  select:focus, textarea:focus {
+    border-color: var(--border-accent);
+    box-shadow: var(--glow-accent-soft);
+  }
+  textarea { min-height: 200px; resize: none; overflow-y: hidden; font-family: var(--font-body); font-size: 14px; }
+  textarea::placeholder { color: var(--gray-500); opacity: 1; }
+
+  .tweet-input-wrap { position: relative; }
+  .tweet-input-wrap textarea { padding-right: 38px; }
+  #tweet-clear-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border-input);
+    background: transparent;
+    color: var(--gray-500);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  #tweet-clear-btn:hover { color: var(--gray-100); border-color: var(--border-accent); }
+
+  .brief-text { font-size: 13px; color: var(--gray-500); margin-top: 10px; line-height: 1.5; }
+  .brief-text a { color: var(--purple-light); text-decoration: none; }
+  .brief-text a:hover { text-decoration: underline; }
+
+  .pill-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .pill-link {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    width: fit-content;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--purple-light);
+    background: #b882ff14;
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-pill);
+    text-decoration: none;
+  }
+  .pill-link:hover { background: #b882ff24; }
+
+  button {
+    margin-top: 28px;
+    padding: 12px 22px;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 600;
+    letter-spacing: var(--tracking-cta);
+    border-radius: var(--radius-control);
+    border: none;
+    background: var(--gradient-brand);
+    color: var(--black-0);
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #evaluate-btn {
+    transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+  }
+  #evaluate-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+    box-shadow: var(--glow-accent-soft);
+  }
+
+  .post-x-btn, .retry-btn {
+    margin-top: 12px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    border: 1px solid var(--border-input);
+    color: var(--gray-100);
+  }
+  .post-x-btn:hover, .retry-btn:hover { border-color: var(--border-accent); }
+
+  #loading {
+    margin-top: 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    font-size: 13px;
+    color: var(--gray-500);
+  }
+  .loading-row { display: flex; align-items: center; gap: 8px; }
+  .spinner {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 2.5px solid var(--border-input);
+    border-top-color: var(--purple);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #result:not(:empty) { margin-top: 24px; }
+  .verdict {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: var(--radius-control);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .verdict-row { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+  .verdict-label { display: inline-flex; align-items: center; gap: 8px; }
+  .verdict-label svg { flex-shrink: 0; }
+  .verdict .count { font-family: var(--font-mono); font-weight: 500; font-size: 12px; opacity: 0.75; }
+  .verdict-disclaimer { font-family: var(--font-body); font-weight: 400; font-size: 13px; line-height: 1.5; opacity: 0.85; }
+  .pass { background: #34d3990f; border: 1px solid #34d39966; color: var(--green); }
+  .fail { background: #f871710f; border: 1px solid #f8717166; color: var(--red); }
+  .reason { margin-top: 12px; font-size: 13.5px; color: var(--gray-400); line-height: 1.6; }
+  .variance-note { margin-top: 0; margin-left: 26px; font-size: 12.5px; color: var(--gray-500); line-height: 1.5; }
+
+  .ecosystem-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ecosystem-tab {
+    margin-top: 0;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 500;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-input);
+    background: transparent;
+    color: var(--gray-400);
+    cursor: pointer;
+  }
+  .ecosystem-tab:hover { border-color: var(--border-accent); color: var(--gray-100); }
+  .ecosystem-tab.active { background: var(--gradient-brand); background-clip: padding-box; border-color: transparent; color: var(--black-0); }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .status-active { color: var(--green); }
+  .status-active .status-dot { background: var(--green); box-shadow: 0 0 6px #34d399aa; }
+  .status-completed { color: var(--gray-500); }
+  .status-completed .status-dot { background: var(--gray-500); }
+
+  .select-wrap { position: relative; }
+  .select-trigger {
+    margin-top: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 12px;
+    font-size: 14px;
+    font-family: var(--font-mono);
+    color: var(--gray-100);
+    border-radius: var(--radius-input);
+    border: 1px solid var(--border-input);
+    background: var(--black-2);
+    cursor: pointer;
+  }
+  .select-trigger:focus, .select-trigger.open { outline: none; border-color: var(--border-accent); box-shadow: var(--glow-accent-soft); }
+  .select-trigger .chevron { width: 15px; height: 15px; color: var(--gray-500); flex-shrink: 0; transition: transform 0.15s; }
+  .select-trigger.open .chevron { transform: rotate(180deg); }
+
+  .select-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--black-2);
+    border: 1px solid var(--border-input);
+    border-radius: var(--radius-input);
+    box-shadow: 0 12px 32px #0009;
+    z-index: 20;
+    display: none;
+  }
+  .select-panel.open { display: block; }
+  .select-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--gray-300);
+    cursor: pointer;
+  }
+  .select-option:hover { background: var(--black-1); }
+  .select-option.selected { color: var(--gray-100); background: #b882ff14; }
+  .select-option-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .select-option-days { font-size: 11px; color: var(--gray-500); white-space: nowrap; }
+
+  .site-footer {
+    margin-top: 20px;
+    padding-top: 12px;
+    text-align: center;
+  }
+  .site-footer p {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--gray-500);
+  }
+  .site-footer p:last-child { margin-bottom: 0; }
+  .site-footer a { color: var(--purple-light); text-decoration: none; }
+  .site-footer a:hover { text-decoration: underline; }
+  .powered-by-link { display: inline-flex; align-items: center; gap: 5px; }
+  .powered-by-link svg { height: 13px; width: auto; }
+  .footer-github-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16px;
+    color: var(--gray-500);
+    transition: color 0.15s ease;
+  }
+  .footer-github-link:hover {
+    color: white;
+  }
+
+  .tiptao-trigger {
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    color: var(--purple-light);
+    cursor: pointer;
+  }
+  .tiptao-trigger:hover { text-decoration: underline; }
+
+  .tiptao-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #000000b3;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .tiptao-backdrop.open { display: flex; }
+  .tiptao-modal { position: relative; max-width: 100%; }
+  .tiptao-modal iframe { display: block; max-width: 100%; }
+  .tiptao-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1;
+    box-sizing: border-box;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border-input);
+    background: #050507b3;
+    backdrop-filter: blur(4px);
+    color: var(--gray-100);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .tiptao-modal-close:hover { border-color: var(--border-accent); color: white; }
+
+  @media (max-width: 480px) {
+    body { padding: 16px 6px; }
+    .card { padding: 14px; }
+    .kicker { font-size: 22px; }
+    .intro { margin: 12px 0 16px; font-size: 14px; }
+    .site-header { margin-bottom: 4px; }
+    .site-footer { margin-top: 14px; padding-top: 10px; }
+    /* Fixed height:1000px (desktop) forces background-size:cover to zoom in
+       drastically once width shrinks to mobile's narrower 220vw cap, cropping
+       the glow's visible orb out of frame. Scale height down to roughly match
+       the source image's own aspect ratio (1920x800) at mobile widths instead. */
+    body::before { height: 380px; top: -60px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="site-header">
+    <img class="header-logo" src="/assets/logo-icon-only.png" alt="Stitch3 Validator">
+    <div class="header-meta">
+      <span class="kicker">Stitch3 Validator</span>
+      <span class="disclaimer">Unofficial community tool, not affiliated with Bitcast or Stitch3</span>
+    </div>
+  </header>
+
+  <p class="intro">Pick the campaign brief you're targeting, paste your draft tweet and check whether it would pass validator review before you post it on X.</p>
+
+  <div class="card">
+    <label class="field-label">Ecosystem</label>
+    <div class="ecosystem-tabs" id="ecosystem-tabs"></div>
+
+    <label class="field-label" id="brief-select-label">Campaign brief</label>
+    <div class="select-wrap">
+      <button type="button" class="select-trigger" id="brief-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="brief-select-label">
+        <span id="brief-select-value"></span>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="select-panel" id="brief-select-panel" role="listbox"></div>
+    </div>
+    <div class="brief-text" id="brief-text"></div>
+    <div class="pill-links">
+      <a class="pill-link" id="brand-overview-link" href="#" target="_blank" rel="noopener">Brand Overview PDF</a>
+    </div>
+
+    <label class="field-label" for="tweet-input">Draft tweet</label>
+    <div class="tweet-input-wrap">
+      <textarea id="tweet-input" placeholder="Paste your draft tweet here..."></textarea>
+      <button type="button" id="tweet-clear-btn" aria-label="Clear draft tweet" style="display:none;">✕</button>
+    </div>
+
+    <button id="evaluate-btn">Check against brief</button>
+
+    <div id="loading" style="display:none;">
+      <div class="loading-row"><span class="spinner"></span>Running validation. This can take up to a minute…</div>
+      <p class="variance-note">Edge cases may result in different verdicts.</p>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <footer class="site-footer">
+    <p class="powered-by">Inference by <a href="https://chutes.ai" target="_blank" rel="noopener" class="powered-by-link"><svg width="62" height="41" viewBox="0 0 62 41" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M38.01 39.6943C37.1263 41.1364 35.2525 41.4057 34.0442 40.2642L28.6738 35.1904C27.4656 34.049 27.4843 32.0273 28.7133 30.9115L34.1258 25.9979C40.1431 20.5352 48.069 18.406 55.6129 20.2255L59.6853 21.2078C59.8306 21.2428 59.9654 21.3165 60.0771 21.422C60.6663 21.9787 60.3364 23.0194 59.552 23.078L59.465 23.0845C52.0153 23.6409 45.1812 27.9913 40.9759 34.8542L38.01 39.6943Z" fill="currentColor"></path><path d="M15.296 36.5912C14.1726 37.8368 12.2763 37.7221 11.2913 36.349L0.547139 21.3709C-0.432786 20.0048 -0.0547272 18.0273 1.34794 17.1822L22.7709 4.27482C29.6029 0.158495 37.7319 -0.277291 44.8086 3.0934L60.3492 10.4956C60.5897 10.6101 60.7997 10.7872 60.9599 11.0106C61.8149 12.2025 60.8991 13.9056 59.5058 13.7148L50.2478 12.4467C42.8554 11.4342 35.4143 14.2848 30.1165 20.1587L15.296 36.5912Z" fill="currentColor"></path></svg>Chutes</a> with Qwen3-32B for Bitcast-aligned tweet validation.</p>
+    <p>Built by <a href="https://x.com/KyoshiTakeshiro" target="_blank" rel="noopener">Kyoshi Takeshiro</a>.<br><button type="button" class="tiptao-trigger" id="tiptao-trigger">Buy me a coffee</button> on <a href="https://www.tiptao.io" target="_blank" rel="noopener">TipTAO</a> ☕️.</p>
+    <a href="https://github.com/KyoshiTakeshiro/Stitch3-Validator" target="_blank" rel="noopener" class="footer-github-link" aria-label="View source on GitHub">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+  </footer>
+</div>
+
+<div class="tiptao-backdrop" id="tiptao-backdrop">
+  <div class="tiptao-modal">
+    <button type="button" class="tiptao-modal-close" id="tiptao-close" aria-label="Close">×</button>
+    <iframe
+      data-tiptao="widget"
+      src="https://www.tiptao.io/kyoshi/widget"
+      width="400"
+      frameborder="0"
+      style="border-radius:16px;border:none;display:block;"
+    ></iframe>
+  </div>
+</div>
+
+<script>
+const tiptaoTrigger = document.getElementById("tiptao-trigger");
+const tiptaoBackdrop = document.getElementById("tiptao-backdrop");
+const tiptaoClose = document.getElementById("tiptao-close");
+
+function openTiptao() { tiptaoBackdrop.classList.add("open"); }
+function closeTiptao() { tiptaoBackdrop.classList.remove("open"); }
+
+tiptaoTrigger.addEventListener("click", openTiptao);
+tiptaoClose.addEventListener("click", closeTiptao);
+tiptaoBackdrop.addEventListener("click", (e) => { if (e.target === tiptaoBackdrop) closeTiptao(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTiptao(); });
+
+window.addEventListener('message',function(e){
+  if(!e.data||e.data.type!=='tiptao-resize')return;
+  document.querySelectorAll('iframe[data-tiptao="widget"]')
+    .forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+'px';});
+});
+</script>
+
+<script>
+const ecosystemTabs = document.getElementById("ecosystem-tabs");
+const selectTrigger = document.getElementById("brief-select-trigger");
+const selectValue = document.getElementById("brief-select-value");
+const selectPanel = document.getElementById("brief-select-panel");
+const briefText = document.getElementById("brief-text");
+const brandOverviewLink = document.getElementById("brand-overview-link");
+const tweetInput = document.getElementById("tweet-input");
+const tweetClearBtn = document.getElementById("tweet-clear-btn");
+const evaluateBtn = document.getElementById("evaluate-btn");
+const resultDiv = document.getElementById("result");
+const loadingDiv = document.getElementById("loading");
+
+const POOL_LABELS = { tao: "Bittensor", hyperliquid: "Perp DEXs", prediction_markets: "Prediction Markets" };
+const POOL_ORDER = ["tao", "hyperliquid", "prediction_markets"];
+
+let briefs = [];
+let pools = [];
+let selectedPool = null;
+let selectedBriefId = null;
+
+function getBriefStatus(brief) {
+  const today = new Date().toISOString().slice(0, 10);
+  return (brief.end_date && brief.end_date < today) ? "completed" : "active";
+}
+
+function statusBadgeHtml(status) {
+  const label = status === "active" ? "Active" : "Completed";
+  return `<span class="status-badge status-${status}"><span class="status-dot"></span>${label.toUpperCase()}</span>`;
+}
+
+const STORAGE_KEY = "bitcast-validator-state";
+let lastResult = null;
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      selectedPool,
+      selectedBriefId,
+      tweet: tweetInput.value,
+      lastResult,
+    }));
+  } catch (e) {}
+}
+
+function restoreState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function loadBriefs() {
+  try {
+    if (window.__PRELOADED_BRIEFS__ && window.__PRELOADED_BRIEFS__.length) {
+      // Embedded directly in the page response (see main.py's "/" route) so
+      // a first-time visitor's first paint doesn't wait on a separate
+      // client-side /briefs round-trip. Falls back to fetching below if the
+      // server-side fetch failed and left this empty.
+      briefs = window.__PRELOADED_BRIEFS__;
+    } else {
+      const resp = await fetch("/briefs");
+      briefs = await resp.json();
+    }
+    pools = [...new Set(briefs.map(b => b.pool))].sort((a, b) => {
+      const ai = POOL_ORDER.indexOf(a), bi = POOL_ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+
+    const saved = restoreState();
+    selectedPool = (saved && pools.includes(saved.selectedPool)) ? saved.selectedPool : pools[0];
+    if (saved) selectedBriefId = saved.selectedBriefId;
+
+    renderEcosystemTabs();
+    renderBriefOptions();
+
+    if (saved && saved.tweet) {
+      tweetInput.value = saved.tweet;
+      autoResizeTweetInput();
+    }
+    if (saved && saved.lastResult && saved.tweet && saved.tweet.trim() && saved.selectedBriefId === selectedBriefId) {
+      lastResult = saved.lastResult;
+      renderResult(lastResult);
+    }
+
+    loadBrandOverviews();
+  } catch (e) {
+    selectValue.textContent = "Failed to load briefs";
+  }
+}
+
+async function loadBrandOverviews() {
+  try {
+    const resp = await fetch("/briefs/brand-overviews");
+    const overviews = await resp.json();
+    briefs.forEach(b => { b.has_brand_overview = !!overviews[b.id]; });
+    updateBriefText();
+  } catch (e) {
+    // Non-fatal: PDF links just stay hidden if this background fetch fails.
+  }
+}
+
+function renderEcosystemTabs() {
+  ecosystemTabs.innerHTML = pools
+    .map(p => `<button type="button" class="ecosystem-tab${p === selectedPool ? " active" : ""}" data-pool="${p}">${POOL_LABELS[p] || p}</button>`)
+    .join("");
+  ecosystemTabs.querySelectorAll(".ecosystem-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedPool = btn.dataset.pool;
+      renderEcosystemTabs();
+      renderBriefOptions();
+      saveState();
+    });
+  });
+}
+
+let filteredBriefs = [];
+
+function renderBriefOptions() {
+  filteredBriefs = briefs
+    .filter(b => b.pool === selectedPool)
+    .sort((a, b) => (b.start_date || "").localeCompare(a.start_date || ""));
+
+  if (!filteredBriefs.some(b => b.id === selectedBriefId)) {
+    selectedBriefId = filteredBriefs.length ? filteredBriefs[0].id : null;
+  }
+
+  selectPanel.innerHTML = filteredBriefs
+    .map(b => {
+      const days = daysRemainingText(b);
+      return `<div class="select-option${b.id === selectedBriefId ? " selected" : ""}" role="option" data-id="${b.id}" aria-selected="${b.id === selectedBriefId}">
+      <span>${b.id}</span>
+      <span class="select-option-meta">${days ? `<span class="select-option-days">${days}</span>` : ""}${statusBadgeHtml(getBriefStatus(b))}</span>
+    </div>`;
+    })
+    .join("");
+
+  selectPanel.querySelectorAll(".select-option").forEach(opt => {
+    opt.addEventListener("click", () => {
+      if (opt.dataset.id !== selectedBriefId) {
+        resultDiv.innerHTML = "";
+        lastResult = null;
+        tweetInput.value = "";
+        autoResizeTweetInput();
+      }
+      selectedBriefId = opt.dataset.id;
+      closePanel();
+      renderBriefOptions();
+      saveState();
+    });
+  });
+
+  renderTriggerValue();
+  updateBriefText();
+}
+
+function renderTriggerValue() {
+  const brief = filteredBriefs.find(b => b.id === selectedBriefId);
+  if (!brief) { selectValue.innerHTML = ""; return; }
+  const days = daysRemainingText(brief);
+  selectValue.innerHTML = `<span>${brief.id}</span> ${statusBadgeHtml(getBriefStatus(brief))} ${days ? `<span class="select-option-days">${days}</span>` : ""}`;
+  selectValue.style.cssText = "display:flex;align-items:center;gap:12px;";
+}
+
+function openPanel() {
+  selectPanel.classList.add("open");
+  selectTrigger.classList.add("open");
+  selectTrigger.setAttribute("aria-expanded", "true");
+}
+function closePanel() {
+  selectPanel.classList.remove("open");
+  selectTrigger.classList.remove("open");
+  selectTrigger.setAttribute("aria-expanded", "false");
+}
+
+selectTrigger.addEventListener("click", () => {
+  selectPanel.classList.contains("open") ? closePanel() : openPanel();
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".select-wrap")) closePanel();
+});
+
+const BRAND_OVERVIEW_BASE_URL = "https://brand-overviews-x.s3.us-west-2.amazonaws.com";
+
+function daysRemainingText(brief) {
+  if (!brief.end_date) return "";
+  const end = new Date(brief.end_date + "T00:00:00Z");
+  const today = new Date();
+  const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const diffDays = Math.round((end - todayUTC) / 86400000);
+  return diffDays > 0 ? `Ends in ${diffDays} day${diffDays === 1 ? "" : "s"}` : "";
+}
+
+function linkifyText(text) {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+
+function updateBriefText() {
+  const brief = briefs.find(b => b.id === selectedBriefId);
+  briefText.innerHTML = brief ? linkifyText(brief.display || brief.brief) : "";
+
+  if (brief && brief.has_brand_overview) {
+    brandOverviewLink.href = `${BRAND_OVERVIEW_BASE_URL}/${brief.id}.pdf`;
+    brandOverviewLink.style.display = "inline-flex";
+  } else {
+    brandOverviewLink.style.display = "none";
+  }
+}
+
+function autoResizeTweetInput() {
+  tweetInput.style.height = "auto";
+  tweetInput.style.height = tweetInput.scrollHeight + "px";
+  tweetClearBtn.style.display = tweetInput.value ? "flex" : "none";
+}
+
+tweetInput.addEventListener("input", () => {
+  if (!tweetInput.value.trim()) {
+    resultDiv.innerHTML = "";
+    lastResult = null;
+  }
+  autoResizeTweetInput();
+  saveState();
+});
+
+tweetClearBtn.addEventListener("click", () => {
+  tweetInput.value = "";
+  resultDiv.innerHTML = "";
+  lastResult = null;
+  autoResizeTweetInput();
+  tweetInput.focus();
+  saveState();
+});
+
+resultDiv.addEventListener("click", (e) => {
+  if (e.target.closest(".retry-btn")) {
+    runEvaluation();
+    return;
+  }
+  if (!e.target.closest(".post-x-btn")) return;
+  const tweet = tweetInput.value.trim();
+  if (!tweet) return;
+  window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(tweet)}`, "_blank", "noopener");
+});
+
+async function runEvaluation() {
+  const tweet = tweetInput.value.trim();
+  const briefId = selectedBriefId;
+  if (!tweet || !briefId) return;
+
+  evaluateBtn.disabled = true;
+  loadingDiv.style.display = "flex";
+  resultDiv.innerHTML = "";
+
+  try {
+    const resp = await fetch("/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brief_id: briefId, tweet }),
+    });
+    if (!resp.ok) {
+      let detail = "Evaluation failed";
+      try {
+        const err = await resp.json();
+        detail = err.detail || detail;
+      } catch (_) {
+        // Response wasn't JSON -- e.g. an HTML timeout/error page from the
+        // proxy. Fall back to the generic message below instead of leaking
+        // a raw parse error.
+      }
+      throw new Error(detail);
+    }
+    const data = await resp.json();
+    lastResult = data;
+    renderResult(data);
+    saveState();
+  } catch (e) {
+    resultDiv.innerHTML = `
+      <div class="verdict fail">Something went wrong while checking your tweet. The check may have taken too long. Please try again.</div>
+      <button type="button" class="retry-btn">Try again</button>
+    `;
+    lastResult = null;
+  } finally {
+    evaluateBtn.disabled = false;
+    loadingDiv.style.display = "none";
+  }
+}
+
+evaluateBtn.addEventListener("click", runEvaluation);
+
+const VERDICT_ICON_PASS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+const VERDICT_ICON_FAIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+const NUM_CHECKS = 3;
+
+function renderResult(data) {
+  const passCount = data.checks.filter(c => c.verdict === "YES").length;
+  const verdictClass = data.meets_brief ? "pass" : "fail";
+  const verdictIcon = data.meets_brief ? VERDICT_ICON_PASS : VERDICT_ICON_FAIL;
+  const verdictText = data.meets_brief ? "Meets brief" : "Does not meet brief";
+  // meets_brief can short-circuit before all NUM_CHECKS finish (any YES wins),
+  // so the true denominator is only known when we actually have all of them.
+  const hasFullCount = data.checks.length === NUM_CHECKS;
+  const countHtml = hasFullCount ? ` — <span class="count">${passCount}/${NUM_CHECKS} checks passed</span>` : "";
+
+  const brief = briefs.find(b => b.id === selectedBriefId);
+  let disclaimerHtml = "";
+  if (data.meets_brief && brief && brief.tag && !tweetInput.value.toLowerCase().includes(brief.tag.toLowerCase())) {
+    const escapedTag = brief.tag.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    disclaimerHtml = `<p class="verdict-disclaimer">Disclaimer: this brief requires tagging <strong>${escapedTag}</strong>. Without it, the real validator may not discover your tweet even if it passes here.</p>`;
+  }
+
+  let html = `<div class="verdict ${verdictClass}"><div class="verdict-row"><span class="verdict-label">${verdictIcon}${verdictText}${countHtml}</span></div>${disclaimerHtml}</div>`;
+  if (data.meets_brief) {
+    html += `<button type="button" class="post-x-btn">Post to X</button>`;
+  }
+
+  if (!data.meets_brief) {
+    const failedCheck = data.checks.find(c => c.verdict === "NO") || data.checks[0];
+    html += `<p class="reason">${failedCheck.summary}</p>`;
+  }
+
+  resultDiv.innerHTML = html;
+}
+
+loadBriefs();
+</script>
+</body>
+</html>
