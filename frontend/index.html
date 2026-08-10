@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stitch3 Validator</title>
 <link rel="icon" type="image/png" href="/assets/favicon-new.png">
+<script>
+// Set the theme attribute before first paint (blocking, synchronous) so
+// there's no flash of the wrong theme on load.
+(function () {
+  try {
+    var saved = localStorage.getItem("stitch3-theme");
+    var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -41,6 +52,26 @@
     --font-mono: "JetBrains Mono", monospace;
     --tracking-label: .14em;
     --tracking-cta: .02em;
+    /* Constant regardless of theme: text sitting on the brand gradient
+       (always a light gradient) must always stay dark for contrast. */
+    --text-on-brand: #050507;
+    --hero-opacity: 0.8;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --black-0: #ffffff;
+    --black-1: #f7f7f9;
+    --black-2: #eceef2;
+    --gray-100: #12141a;
+    --gray-300: #3a3f4b;
+    --gray-400: #565c6b;
+    --gray-500: #767c8a;
+    --border-card: #00000017;
+    --border-input: #00000022;
+    --border-accent: #7c3aed4d;
+    --glow-accent-soft: 0 0 16px #7c3aed26;
+    --hero-opacity: 0.16;
   }
 
   * { box-sizing: border-box; }
@@ -73,7 +104,43 @@
     background-position: center top;
     -webkit-mask-image: linear-gradient(black 55%, transparent 98%);
     mask-image: linear-gradient(black 55%, transparent 98%);
-    opacity: 0.8;
+    opacity: var(--hero-opacity);
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* hero-background.png is near-black with pale highlights, built to glow
+     against a dark page -- faded down for light mode it just reads as a
+     gray smudge, not a genuine color. Keep the same asset (same crescent
+     shape/composition as dark mode) but recolor it for a light background:
+     invert flips near-black to near-white and the pale highlights to a
+     saturated color, hue-rotate brings that color back to brand purple,
+     and multiply blend makes the inverted white areas disappear into the
+     page instead of covering it. */
+  [data-theme="light"] body::before {
+    filter: invert(1) hue-rotate(200deg) saturate(1.0);
+    mix-blend-mode: multiply;
+    opacity: 0.4;
+  }
+  /* The image's reflection strip is nearly desaturated in the source, and
+     filter: saturate() can't add hue to zero-chroma pixels (it only scales
+     existing chroma) -- that left a gray smudge even after the recolor
+     above. A second layer, same shape/mask, using mix-blend-mode: color
+     forces brand hue onto whatever's left gray while leaving true white
+     page background untouched (white has no luminance range left to tint). */
+  [data-theme="light"] body::after {
+    content: "";
+    position: absolute;
+    top: -160px;
+    left: 50%;
+    width: max(1400px, 120vw);
+    max-width: 220vw;
+    height: 1000px;
+    transform: translateX(-50%);
+    background-image: var(--gradient-brand);
+    -webkit-mask-image: linear-gradient(black 55%, transparent 98%);
+    mask-image: linear-gradient(black 55%, transparent 98%);
+    mix-blend-mode: color;
+    opacity: 0.4;
     pointer-events: none;
     z-index: 0;
   }
@@ -93,6 +160,9 @@
     flex-direction: column;
   }
   .header-logo { height: 72px; width: auto; margin-bottom: 40px; display: block; align-self: flex-start; }
+  /* Logo asset is a white glyph on transparent px -- invert it to black in
+     light theme rather than needing a second asset. */
+  [data-theme="light"] .header-logo { filter: invert(1); }
   .header-meta { display: flex; flex-direction: column; gap: 2px; }
   .kicker {
     font-family: var(--font-display);
@@ -103,6 +173,31 @@
   }
   .disclaimer { font-size: 12px; color: var(--gray-500); }
 
+  .theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border-input);
+    background: var(--black-1);
+    color: var(--gray-400);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .theme-toggle:hover { color: var(--gray-100); border-color: var(--border-accent); }
+  .theme-toggle svg { width: 17px; height: 17px; display: block; }
+  .theme-toggle .icon-sun { display: none; }
+  [data-theme="light"] .theme-toggle .icon-moon { display: none; }
+  [data-theme="light"] .theme-toggle .icon-sun { display: block; }
+
   .intro { margin: 20px 0 28px; font-size: 15px; color: var(--gray-400); }
 
   .card {
@@ -112,6 +207,7 @@
     padding: 28px;
     box-shadow: 0 8px 48px #0009, 0 0 64px #b882ff14;
   }
+  [data-theme="light"] .card { box-shadow: 0 8px 32px #0000001a, 0 0 48px #7c3aed14; }
 
   .field-label {
     display: block;
@@ -197,7 +293,7 @@
     border-radius: var(--radius-control);
     border: none;
     background: var(--gradient-brand);
-    color: var(--black-0);
+    color: var(--text-on-brand);
     cursor: pointer;
   }
   button:disabled { opacity: 0.5; cursor: default; }
@@ -297,7 +393,7 @@
     cursor: pointer;
   }
   .ecosystem-tab:hover { border-color: var(--border-accent); color: var(--gray-100); }
-  .ecosystem-tab.active { background: var(--gradient-brand); background-clip: padding-box; border-color: transparent; color: var(--black-0); }
+  .ecosystem-tab.active { background: var(--gradient-brand); background-clip: padding-box; border-color: transparent; color: var(--text-on-brand); }
 
   .status-badge {
     display: inline-flex;
@@ -392,7 +488,7 @@
     transition: color 0.15s ease;
   }
   .footer-github-link:hover {
-    color: white;
+    color: var(--gray-100);
   }
 
   .tiptao-trigger {
@@ -433,15 +529,24 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    border: 1px solid var(--border-input);
+    border: 1px solid #ffffff1f;
+    /* Background/icon colors here are deliberately constant across themes
+       (not the --black-1/--gray-100 tokens) -- this button sits over the
+       always-dark TipTAO iframe widget, not the page background, so it
+       must not flip to dark-on-dark when the page switches to light theme. */
     background: #050507b3;
     backdrop-filter: blur(4px);
-    color: var(--gray-100);
+    color: #f1f5f9;
     font-size: 16px;
     line-height: 1;
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
-  .tiptao-modal-close:hover { border-color: var(--border-accent); color: white; }
+  .tiptao-modal-close:hover {
+    background: #1a1a1ecc;
+    border-color: var(--border-accent);
+    color: white;
+  }
 
   @media (max-width: 480px) {
     body { padding: 16px 6px; }
@@ -459,6 +564,10 @@
 </style>
 </head>
 <body>
+<button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark theme">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+</button>
 <div class="page">
   <header class="site-header">
     <img class="header-logo" src="/assets/logo-icon-only.png" alt="Stitch3 Validator">
@@ -895,8 +1004,14 @@ async function runEvaluation() {
     renderResult(finalData);
     saveState();
   } catch (e) {
+    // Surface a specific server message (e.g. the 429 rate-limit notice)
+    // directly; fall back to a generic message for genuine network/timeout
+    // failures where we never got a real detail string from the server.
+    const message = e.message && e.message !== "Evaluation failed"
+      ? e.message
+      : "Something went wrong while checking your tweet. The check may have taken too long. Please try again.";
     resultDiv.innerHTML = `
-      <div class="verdict fail">Something went wrong while checking your tweet. The check may have taken too long. Please try again.</div>
+      <div class="verdict fail">${message}</div>
       <button type="button" class="retry-btn">Try again</button>
     `;
     lastResult = null;
@@ -948,6 +1063,18 @@ function renderResult(data) {
 
   resultDiv.innerHTML = html;
 }
+
+const themeToggle = document.getElementById("theme-toggle");
+themeToggle.addEventListener("click", () => {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  if (isLight) {
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.setItem("stitch3-theme", "dark");
+  } else {
+    document.documentElement.setAttribute("data-theme", "light");
+    localStorage.setItem("stitch3-theme", "light");
+  }
+});
 
 loadBriefs();
 </script>

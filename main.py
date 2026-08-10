@@ -11,10 +11,11 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +39,42 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# /evaluate and /evaluate/stream are the only endpoints that spend real money
+# (each check is a Chutes API call against our own key) -- /briefs and the
+# brand-overview lookups are cheap/cached and don't need this. In-memory,
+# per-process fixed-window limiter: fine for this single-instance deployment,
+# same tradeoff as the existing _briefs_cache/_overview_cache dicts below.
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX_REQUESTS = 5  # per IP, per window
+_rate_limit_hits: dict[str, list[float]] = {}
+_rate_limit_lock = Lock()
+
+
+def _client_ip(request: Request) -> str:
+    # Behind nginx, request.client.host is the proxy's own address unless
+    # X-Forwarded-For is set -- prefer that when present.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_rate_limit(request: Request) -> None:
+    ip = _client_ip(request)
+    now = time.time()
+    cutoff = now - RATE_LIMIT_WINDOW
+    with _rate_limit_lock:
+        hits = [t for t in _rate_limit_hits.get(ip, []) if t > cutoff]
+        if len(hits) >= RATE_LIMIT_MAX_REQUESTS:
+            retry_after = int(hits[0] - cutoff) + 1
+            raise HTTPException(
+                status_code=429,
+                detail="Too many checks in a short time — please wait a bit before trying again.",
+                headers={"Retry-After": str(retry_after)},
+            )
+        hits.append(now)
+        _rate_limit_hits[ip] = hits
 
 
 class EvaluateRequest(BaseModel):
@@ -208,7 +245,8 @@ def get_brand_overviews():
 
 
 @app.post("/evaluate", response_model=EvaluateResponse)
-def evaluate(req: EvaluateRequest):
+def evaluate(req: EvaluateRequest, request: Request):
+    _enforce_rate_limit(request)
     brief = _lookup_brief(req.brief_id)
     prompt_version = brief.get("prompt_version", 1)
 
@@ -224,12 +262,13 @@ def evaluate(req: EvaluateRequest):
 
 
 @app.post("/evaluate/stream")
-def evaluate_stream(req: EvaluateRequest):
+def evaluate_stream(req: EvaluateRequest, request: Request):
     """SSE variant of /evaluate: emits a "check" event as each of the (up to
     NUM_LLM_CHECKS) checks completes, then a final "done" event with the
     same shape as EvaluateResponse. Lets the frontend show real per-check
     progress during the pessimistic (must-pass-all-3) wait instead of a
     static "please wait" message."""
+    _enforce_rate_limit(request)
     brief = _lookup_brief(req.brief_id)
     prompt_version = brief.get("prompt_version", 1)
 
