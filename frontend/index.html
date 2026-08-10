@@ -245,6 +245,23 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  .check-progress { display: flex; align-items: center; gap: 6px; margin-top: 10px; margin-left: 26px; }
+  .check-dot {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-input);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--gray-500);
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+  }
+  .check-dot svg { width: 11px; height: 11px; }
+  .check-dot.pending { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+  .check-dot.pass { border-color: #34d39966; background: #34d3990f; color: var(--green); }
+  .check-dot.fail { border-color: #f8717166; background: #f871710f; color: var(--red); }
+  .check-dot.skipped { opacity: 0.3; }
+
   #result:not(:empty) { margin-top: 24px; }
   .verdict {
     display: flex;
@@ -263,7 +280,8 @@
   .pass { background: #34d3990f; border: 1px solid #34d39966; color: var(--green); }
   .fail { background: #f871710f; border: 1px solid #f8717166; color: var(--red); }
   .reason { margin-top: 12px; font-size: 13.5px; color: var(--gray-400); line-height: 1.6; }
-  .variance-note { margin-top: 0; margin-left: 26px; font-size: 12.5px; color: var(--gray-500); line-height: 1.5; }
+  .variance-note { margin-top: 10px; font-size: 12.5px; color: var(--gray-500); line-height: 1.5; }
+  #loading .variance-note { margin-left: 26px; }
 
   .ecosystem-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
   .ecosystem-tab {
@@ -478,8 +496,12 @@
     <button id="evaluate-btn">Check against brief</button>
 
     <div id="loading" style="display:none;">
-      <div class="loading-row"><span class="spinner"></span>Running validation. This can take up to a minute…</div>
-      <p class="variance-note">Edge cases may result in different verdicts.</p>
+      <div class="loading-row"><span class="spinner"></span><span id="loading-text">Running validation. This can take up to a minute…</span></div>
+      <div class="check-progress" id="check-progress">
+        <span class="check-dot pending" data-idx="1"></span>
+        <span class="check-dot pending" data-idx="2"></span>
+        <span class="check-dot pending" data-idx="3"></span>
+      </div>
     </div>
     <div id="result"></div>
   </div>
@@ -538,6 +560,8 @@ const tweetClearBtn = document.getElementById("tweet-clear-btn");
 const evaluateBtn = document.getElementById("evaluate-btn");
 const resultDiv = document.getElementById("result");
 const loadingDiv = document.getElementById("loading");
+const loadingText = document.getElementById("loading-text");
+const checkDots = Array.from(document.querySelectorAll(".check-dot"));
 
 const POOL_LABELS = { tao: "Bittensor", hyperliquid: "Perp DEXs", prediction_markets: "Prediction Markets" };
 const POOL_ORDER = ["tao", "hyperliquid", "prediction_markets"];
@@ -721,6 +745,7 @@ function daysRemainingText(brief) {
   const today = new Date();
   const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const diffDays = Math.round((end - todayUTC) / 86400000);
+  if (diffDays === 0) return "Ends today";
   return diffDays > 0 ? `Ends in ${diffDays} day${diffDays === 1 ? "" : "s"}` : "";
 }
 
@@ -779,6 +804,41 @@ resultDiv.addEventListener("click", (e) => {
   window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(tweet)}`, "_blank", "noopener");
 });
 
+const CHECK_DOT_PASS = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+const CHECK_DOT_FAIL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+function resetCheckDots() {
+  checkDots.forEach(dot => {
+    dot.className = "check-dot pending";
+    dot.innerHTML = "";
+  });
+  loadingText.textContent = "Running validation 1 of 3…";
+}
+
+function updateCheckDots(index, verdict) {
+  const dot = checkDots[index - 1];
+  if (!dot) return;
+  if (verdict === "YES") {
+    dot.className = "check-dot pass";
+    dot.innerHTML = CHECK_DOT_PASS;
+    if (index < checkDots.length) {
+      loadingText.textContent = `Validation ${index} of 3 passed. Running validation ${index + 1}…`;
+    } else {
+      loadingText.textContent = "All 3 validations passed.";
+    }
+  } else {
+    dot.className = "check-dot fail";
+    dot.innerHTML = CHECK_DOT_FAIL;
+    loadingText.textContent = `Validation ${index} of 3 failed — stopping early.`;
+    // Pessimistic scoring: one failed check already dooms the verdict, so
+    // any checks that hadn't started yet were never run. Mark them as
+    // skipped rather than leaving them pulsing forever.
+    for (let i = index; i < checkDots.length; i++) {
+      checkDots[i].className = "check-dot skipped";
+    }
+  }
+}
+
 async function runEvaluation() {
   const tweet = tweetInput.value.trim();
   const briefId = selectedBriefId;
@@ -787,9 +847,10 @@ async function runEvaluation() {
   evaluateBtn.disabled = true;
   loadingDiv.style.display = "flex";
   resultDiv.innerHTML = "";
+  resetCheckDots();
 
   try {
-    const resp = await fetch("/evaluate", {
+    const resp = await fetch("/evaluate/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ brief_id: briefId, tweet }),
@@ -806,9 +867,32 @@ async function runEvaluation() {
       }
       throw new Error(detail);
     }
-    const data = await resp.json();
-    lastResult = data;
-    renderResult(data);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalData = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop();
+      for (const part of parts) {
+        if (!part.startsWith("data: ")) continue;
+        const payload = JSON.parse(part.slice(6));
+        if (payload.type === "check") {
+          updateCheckDots(payload.index, payload.verdict);
+        } else if (payload.type === "done") {
+          finalData = payload;
+        }
+      }
+    }
+
+    if (!finalData) throw new Error("Evaluation failed");
+    lastResult = finalData;
+    renderResult(finalData);
     saveState();
   } catch (e) {
     resultDiv.innerHTML = `
@@ -833,8 +917,9 @@ function renderResult(data) {
   const verdictClass = data.meets_brief ? "pass" : "fail";
   const verdictIcon = data.meets_brief ? VERDICT_ICON_PASS : VERDICT_ICON_FAIL;
   const verdictText = data.meets_brief ? "Meets brief" : "Does not meet brief";
-  // meets_brief can short-circuit before all NUM_CHECKS finish (any YES wins),
-  // so the true denominator is only known when we actually have all of them.
+  // Pessimistic scoring (all NUM_CHECKS must be YES) short-circuits on the
+  // first NO, so a fail can arrive with fewer than NUM_CHECKS checks run --
+  // the true denominator is only known once we actually have all of them.
   const hasFullCount = data.checks.length === NUM_CHECKS;
   const countHtml = hasFullCount ? ` — <span class="count">${passCount}/${NUM_CHECKS} checks passed</span>` : "";
 
@@ -853,6 +938,12 @@ function renderResult(data) {
   if (!data.meets_brief) {
     const failedCheck = data.checks.find(c => c.verdict === "NO") || data.checks[0];
     html += `<p class="reason">${failedCheck.summary}</p>`;
+    // Only surface the pessimistic-scoring explanation when it's actually
+    // the confusing case: an earlier check passed before this one failed.
+    // A fail on the very first check needs no extra context.
+    if (data.checks.length > 1) {
+      html += `<p class="variance-note">An earlier check passed, but all 3 independent checks must pass. Stricter than the real validator, which only needs 1 of 3.</p>`;
+    }
   }
 
   resultDiv.innerHTML = html;

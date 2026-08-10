@@ -16,7 +16,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -115,6 +115,43 @@ def run_single_check(brief: dict, tweet: str, prompt_version: int, check_num: in
     return CheckResult(verdict=verdict, summary=summary, raw_response=text)
 
 
+def run_checks_pessimistic(brief: dict, tweet: str, prompt_version: int):
+    """Yield each CheckResult as it completes, stopping at the first NO.
+
+    Deliberately stricter than the real validator's own optimistic
+    (any-YES-wins) best-of-3: a single NO here already means meets_brief
+    can never be True, so there's no reason to reduce this to a numeric
+    score -- the caller just needs every yielded check to be YES, and
+    needs to see all NUM_LLM_CHECKS of them, for the tweet to pass. This
+    makes our checker harder to satisfy than the real validator, on
+    purpose -- see project notes for why (false positives here are far
+    more costly to a miner than false negatives).
+    """
+    executor = ThreadPoolExecutor(max_workers=NUM_LLM_CHECKS)
+    futures = [
+        executor.submit(run_single_check, brief, tweet, prompt_version, check_num)
+        for check_num in range(1, NUM_LLM_CHECKS + 1)
+    ]
+    try:
+        for future in as_completed(futures):
+            result = future.result()
+            yield result
+            if result.verdict != "YES":
+                break
+    finally:
+        executor.shutdown(wait=False)
+
+
+def _lookup_brief(brief_id: str) -> dict:
+    resp = requests.get(BITCAST_BRIEFS_ENDPOINT, timeout=10)
+    resp.raise_for_status()
+    briefs = resp.json().get("items", [])
+    brief = next((b for b in briefs if b["id"] == brief_id), None)
+    if brief is None:
+        raise HTTPException(status_code=404, detail=f"Brief '{brief_id}' not found")
+    return brief
+
+
 def has_brand_overview(brief_id: str) -> bool:
     url = f"{BRAND_OVERVIEW_BASE_URL}/{brief_id}.pdf"
     resp = requests.head(url, timeout=10)
@@ -172,33 +209,11 @@ def get_brand_overviews():
 
 @app.post("/evaluate", response_model=EvaluateResponse)
 def evaluate(req: EvaluateRequest):
-    resp = requests.get(BITCAST_BRIEFS_ENDPOINT, timeout=10)
-    resp.raise_for_status()
-    briefs = resp.json().get("items", [])
-
-    brief = next((b for b in briefs if b["id"] == req.brief_id), None)
-    if brief is None:
-        raise HTTPException(status_code=404, detail=f"Brief '{req.brief_id}' not found")
-
+    brief = _lookup_brief(req.brief_id)
     prompt_version = brief.get("prompt_version", 1)
 
-    executor = ThreadPoolExecutor(max_workers=NUM_LLM_CHECKS)
-    futures = [
-        executor.submit(run_single_check, brief, req.tweet, prompt_version, check_num)
-        for check_num in range(1, NUM_LLM_CHECKS + 1)
-    ]
-
-    checks: list[CheckResult] = []
-    meets_brief = False
-    for future in as_completed(futures):
-        checks.append(future.result())
-        if checks[-1].verdict == "YES":
-            meets_brief = True
-            break
-
-    # Any remaining checks (if we exited early on a YES) finish in the
-    # background and are simply discarded — no need to block the response.
-    executor.shutdown(wait=False)
+    checks = list(run_checks_pessimistic(brief, req.tweet, prompt_version))
+    meets_brief = len(checks) == NUM_LLM_CHECKS and all(c.verdict == "YES" for c in checks)
 
     return EvaluateResponse(
         meets_brief=meets_brief,
@@ -206,6 +221,36 @@ def evaluate(req: EvaluateRequest):
         prompt_version=prompt_version,
         brief_display=brief.get("display", brief.get("brief", "")),
     )
+
+
+@app.post("/evaluate/stream")
+def evaluate_stream(req: EvaluateRequest):
+    """SSE variant of /evaluate: emits a "check" event as each of the (up to
+    NUM_LLM_CHECKS) checks completes, then a final "done" event with the
+    same shape as EvaluateResponse. Lets the frontend show real per-check
+    progress during the pessimistic (must-pass-all-3) wait instead of a
+    static "please wait" message."""
+    brief = _lookup_brief(req.brief_id)
+    prompt_version = brief.get("prompt_version", 1)
+
+    def event_stream():
+        checks: list[CheckResult] = []
+        for result in run_checks_pessimistic(brief, req.tweet, prompt_version):
+            checks.append(result)
+            payload = {"type": "check", "index": len(checks), "verdict": result.verdict}
+            yield f"data: {json.dumps(payload)}\n\n"
+
+        meets_brief = len(checks) == NUM_LLM_CHECKS and all(c.verdict == "YES" for c in checks)
+        final = {
+            "type": "done",
+            "meets_brief": meets_brief,
+            "checks": [c.model_dump() for c in checks],
+            "prompt_version": prompt_version,
+            "brief_display": brief.get("display", brief.get("brief", "")),
+        }
+        yield f"data: {json.dumps(final)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
