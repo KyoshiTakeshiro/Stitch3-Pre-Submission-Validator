@@ -6,6 +6,7 @@ instant pass/fail verdict, replicating the same LLM evaluation logic and
 optimistic multi-check strategy that real Bitcast validators use.
 """
 
+import hashlib
 import json
 import os
 import time
@@ -199,6 +200,64 @@ BRIEFS_CACHE_TTL = 300  # seconds
 _briefs_cache = {"data": None, "expires_at": 0.0}
 _overview_cache = {"data": None, "expires_at": 0.0}
 
+STATS_FILE = Path(__file__).parent / "stats.json"
+STATS_SINCE = "2026-08-10"
+_stats_lock = Lock()
+
+
+def _hash_ip(ip: str) -> str:
+    # Store a salted-ish hash, never the raw IP -- stats.json holding real
+    # visitor IPs would be a real privacy liability if it ever leaked or got
+    # committed by mistake. We only ever need to dedupe, not identify.
+    return hashlib.sha256(f"stitch3-validator:{ip}".encode()).hexdigest()
+
+
+def _load_stats_raw() -> dict:
+    if STATS_FILE.exists():
+        try:
+            data = json.loads(STATS_FILE.read_text())
+            data.setdefault("tweets_checked", 0)
+            data.setdefault("fails_caught", 0)
+            data.setdefault("creator_ip_hashes", [])
+            data.setdefault("since", STATS_SINCE)
+            return data
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"tweets_checked": 0, "fails_caught": 0, "creator_ip_hashes": [], "since": STATS_SINCE}
+
+
+def _load_stats_public() -> dict:
+    """What /stats actually returns -- the hash list itself never leaves
+    the server, only its count, since it's still one-way-linkable to
+    "did this specific visitor use the tool" even though it's not a raw IP."""
+    stats = _load_stats_raw()
+    return {
+        "tweets_checked": stats["tweets_checked"],
+        "fails_caught": stats["fails_caught"],
+        "unique_creators": len(stats["creator_ip_hashes"]),
+        "since": stats["since"],
+    }
+
+
+def _record_check(ip: str, meets_brief: bool) -> None:
+    """File-backed counters (no database in this project) so they survive
+    restarts/redeploys, unlike the in-memory caches above. Counts a
+    completed evaluation (checks actually ran to a result), not merely an
+    attempted request -- rate-limited or errored calls don't count.
+    fails_caught has no historical backfill (unlike tweets_checked/
+    unique_creators) -- nginx access logs only have HTTP status, not the
+    verdict, so there was no way to reconstruct it for checks run before
+    this counter existed."""
+    with _stats_lock:
+        stats = _load_stats_raw()
+        stats["tweets_checked"] += 1
+        if not meets_brief:
+            stats["fails_caught"] += 1
+        ip_hash = _hash_ip(ip)
+        if ip_hash not in stats["creator_ip_hashes"]:
+            stats["creator_ip_hashes"].append(ip_hash)
+        STATS_FILE.write_text(json.dumps(stats))
+
 
 def _get_cached_briefs() -> list[dict]:
     """Fast path: brief list only, no S3 checks. Shared by /briefs and the
@@ -244,6 +303,11 @@ def get_brand_overviews():
     return result
 
 
+@app.get("/stats")
+def get_stats():
+    return _load_stats_public()
+
+
 @app.post("/evaluate", response_model=EvaluateResponse)
 def evaluate(req: EvaluateRequest, request: Request):
     _enforce_rate_limit(request)
@@ -252,6 +316,7 @@ def evaluate(req: EvaluateRequest, request: Request):
 
     checks = list(run_checks_pessimistic(brief, req.tweet, prompt_version))
     meets_brief = len(checks) == NUM_LLM_CHECKS and all(c.verdict == "YES" for c in checks)
+    _record_check(_client_ip(request), meets_brief)
 
     return EvaluateResponse(
         meets_brief=meets_brief,
@@ -280,6 +345,7 @@ def evaluate_stream(req: EvaluateRequest, request: Request):
             yield f"data: {json.dumps(payload)}\n\n"
 
         meets_brief = len(checks) == NUM_LLM_CHECKS and all(c.verdict == "YES" for c in checks)
+        _record_check(_client_ip(request), meets_brief)
         final = {
             "type": "done",
             "meets_brief": meets_brief,

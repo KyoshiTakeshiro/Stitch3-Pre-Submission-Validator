@@ -194,3 +194,6 @@ __marimo__/
 .claude/launch.json
 CLAUDE.md
 fidelity-baseline.json
+
+# Runtime data (persisted counters etc.), not source
+stats.json
