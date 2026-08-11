@@ -14,9 +14,9 @@ This tool is built to replicate the actual validator's brief-evaluation logic as
 
 - **Same model and provider.** Evaluation runs on `Qwen/Qwen3-32B` via [Chutes](https://chutes.ai) — the same model and provider the production validator uses, not a different LLM standing in for it.
 - **Same prompts.** All 4 prompt versions are transcribed directly from the validator's source, and the correct version is selected automatically per brief (via each brief's `prompt_version` field), the same way the real validator does.
-- **Same optimistic multi-check strategy.** Just like the real validator, this tool runs up to 3 independent evaluation checks per tweet and accepts it as compliant if *any* check passes — including appending the same per-check text differentiator the validator uses internally so each of the 3 checks is a genuinely independent judgment rather than 3 repeats of the same answer.
+- **Deliberately stricter than the real validator's own multi-check strategy.** The real validator runs up to 3 independent evaluation checks per tweet and accepts it as compliant if *any* check passes. This tool runs the same 3 independent checks (including the same per-check text differentiator the validator uses internally, so each check is a genuinely independent judgment rather than 3 repeats of the same answer) but requires *all 3* to pass, stopping early at the first failure. This is an intentional deviation, not a fidelity gap: since a false "pass" here is far more costly to a creator than a false "fail" (they'd post believing it's compliant, only to have the real validator disagree), the tool is tuned to be a conservative predictor rather than an exact replica of the validator's own leniency.
 
-Because of that last point, results can vary slightly between runs on borderline tweets — that's expected, and mirrors how the live validator itself behaves, not a bug in this tool.
+Because of that, a tweet can occasionally fail here even though the real validator, using its own more lenient any-1-of-3 rule, would have passed it — that trade-off is intentional. Results can also vary slightly between runs on borderline tweets, since each of the 3 checks is an independent LLM judgment — that's expected, not a bug.
 
 **Getting Started**
 
@@ -63,7 +63,7 @@ Because of that last point, results can vary slightly between runs on borderline
 
    - Pick an ecosystem (Bittensor / Perp DEXs / Prediction Markets), then choose a campaign from the **Campaign brief** dropdown.
    - Paste your draft tweet into the **Draft tweet** field.
-   - Click **Check against brief**. The tool runs up to 3 checks (mirroring the real validator's optimistic multi-check strategy) and returns a pass/fail verdict, with a reason shown if it fails.
+   - Click **Check against brief**. The tool runs up to 3 independent checks and only passes the tweet if *all 3* agree — stricter than the real validator's own any-1-of-3 rule (see above) — returning a pass/fail verdict, with a reason shown if it fails.
 
 **Maintainers & Contributions**
 
