@@ -1144,13 +1144,26 @@ themeToggle.addEventListener("click", () => {
   }
 });
 
+function animateCountUp(el, targetValue, duration = 1000) {
+  const start = performance.now();
+  function tick(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    // ease-out cubic -- fast start, settles into the final number instead
+    // of a linear (mechanical-feeling) count.
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * targetValue).toLocaleString();
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 function loadStats() {
   fetch("/stats")
     .then(resp => resp.json())
     .then(data => {
-      document.getElementById("stats-value-checked").textContent = data.tweets_checked.toLocaleString();
-      document.getElementById("stats-value-creators").textContent = data.unique_creators.toLocaleString();
-      document.getElementById("stats-value-fails").textContent = data.fails_caught.toLocaleString();
+      animateCountUp(document.getElementById("stats-value-checked"), data.tweets_checked);
+      animateCountUp(document.getElementById("stats-value-creators"), data.unique_creators);
+      animateCountUp(document.getElementById("stats-value-fails"), data.fails_caught);
     })
     .catch(() => {
       // Non-critical -- leave the placeholder dash rather than blocking anything.
