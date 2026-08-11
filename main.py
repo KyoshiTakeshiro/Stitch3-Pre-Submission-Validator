@@ -289,7 +289,22 @@ def evaluate_stream(req: EvaluateRequest, request: Request):
         }
         yield f"data: {json.dumps(final)}\n\n"
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Tells nginx not to buffer the response before forwarding it --
+            # without this, a reverse proxy can hold the whole SSE stream
+            # until the generator finishes, so the frontend receives every
+            # "check" event and the final "done" event in one burst instead
+            # of progressively. (Still requires `proxy_buffering off;` in
+            # the actual nginx config on the VPS for this header to take
+            # effect there -- see deploy notes.)
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"

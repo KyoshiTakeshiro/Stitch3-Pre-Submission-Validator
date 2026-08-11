@@ -993,6 +993,16 @@ async function runEvaluation() {
         const payload = JSON.parse(part.slice(6));
         if (payload.type === "check") {
           updateCheckDots(payload.index, payload.verdict);
+          // A proxy/buffer between us and the server can deliver several
+          // events in one burst instead of as they actually happen -- when
+          // that happens, this loop processes them synchronously and the
+          // browser never gets a chance to paint the intermediate dot
+          // states before the final result overwrites them (reported as
+          // "dots never fill in, it just jumps to the result"). Forcing a
+          // brief pause after each dot update guarantees it's actually
+          // visible on screen, regardless of how bunched up the delivery
+          // was.
+          await new Promise(resolve => setTimeout(resolve, 350));
         } else if (payload.type === "done") {
           finalData = payload;
         }
