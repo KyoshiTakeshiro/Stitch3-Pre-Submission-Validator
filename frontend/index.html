@@ -10,9 +10,10 @@
 // there's no flash of the wrong theme on load.
 (function () {
   try {
+    // Dark is the default regardless of OS/browser preference -- only an
+    // explicit toggle click (saved below) switches it to light.
     var saved = localStorage.getItem("stitch3-theme");
-    var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
-    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+    if (saved === "light") document.documentElement.setAttribute("data-theme", "light");
   } catch (e) {}
 })();
 </script>
@@ -391,7 +392,16 @@
     background: transparent;
     color: var(--gray-400);
     cursor: pointer;
+    white-space: nowrap;
   }
+  /* Applied by JS (fitEcosystemTabs) only on narrow screens where the 3
+     pills don't fit on one line at normal size -- shrinks just enough to
+     avoid "Prediction Markets" wrapping to its own line. Screens wide
+     enough to fit the pills at normal size never get these classes. */
+  .ecosystem-tabs.tabs-compact { gap: 6px; }
+  .ecosystem-tabs.tabs-compact .ecosystem-tab { padding: 7px 11px; font-size: 12px; }
+  .ecosystem-tabs.tabs-tight { gap: 4px; }
+  .ecosystem-tabs.tabs-tight .ecosystem-tab { padding: 6px 8px; font-size: 11px; }
   .ecosystem-tab:hover { border-color: var(--border-accent); color: var(--gray-100); }
   .ecosystem-tab.active { background: var(--gradient-brand); background-clip: padding-box; border-color: transparent; color: var(--text-on-brand); }
 
@@ -824,6 +834,40 @@ async function loadBrandOverviews() {
   }
 }
 
+function fitEcosystemTabs() {
+  // Only bother measuring on narrow screens -- desktop always has room and
+  // this avoids doing layout-thrashing work on every resize on wide viewports.
+  ecosystemTabs.classList.remove("tabs-compact", "tabs-tight");
+  ecosystemTabs.style.flexWrap = "wrap";
+  if (window.innerWidth > 520) return;
+
+  // With flex-wrap: wrap, the browser resolves overflow by wrapping to a
+  // second line, so scrollWidth never exceeds clientWidth and this check
+  // would never fire -- force nowrap first so overflow is actually
+  // measurable, then decide whether shrinking fixes it or it should just
+  // fall back to wrapping after all.
+  ecosystemTabs.style.flexWrap = "nowrap";
+  const fits = () => ecosystemTabs.scrollWidth <= ecosystemTabs.clientWidth + 1;
+  if (fits()) return;
+
+  ecosystemTabs.classList.add("tabs-compact");
+  if (fits()) return;
+
+  ecosystemTabs.classList.add("tabs-tight");
+  if (fits()) return;
+
+  // Still doesn't fit even at the smallest tier (very narrow screen) --
+  // fall back to letting it wrap rather than shrinking illegibly small.
+  ecosystemTabs.classList.remove("tabs-compact", "tabs-tight");
+  ecosystemTabs.style.flexWrap = "wrap";
+}
+
+let fitEcosystemTabsResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(fitEcosystemTabsResizeTimer);
+  fitEcosystemTabsResizeTimer = setTimeout(fitEcosystemTabs, 100);
+});
+
 function renderEcosystemTabs() {
   ecosystemTabs.innerHTML = pools
     .map(p => `<button type="button" class="ecosystem-tab${p === selectedPool ? " active" : ""}" data-pool="${p}">${POOL_LABELS[p] || p}</button>`)
@@ -836,6 +880,7 @@ function renderEcosystemTabs() {
       saveState();
     });
   });
+  fitEcosystemTabs();
 }
 
 let filteredBriefs = [];
