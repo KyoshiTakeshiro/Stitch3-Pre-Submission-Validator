@@ -1134,10 +1134,18 @@ async function runEvaluation() {
     renderResult(finalData);
     saveState();
   } catch (e) {
-    // Surface a specific server message (e.g. the 429 rate-limit notice)
-    // directly; fall back to a generic message for genuine network/timeout
-    // failures where we never got a real detail string from the server.
-    const message = e.message && e.message !== "Evaluation failed"
+    // Only errors we explicitly threw with a real server-provided detail
+    // (the 429 rate-limit notice, or another JSON error body) get shown
+    // verbatim -- those are plain Error instances from the `throw new
+    // Error(detail)` path above. Anything else -- a raw TypeError from
+    // fetch() itself (e.g. "Failed to fetch" / "NetworkError when
+    // attempting to fetch resource." from a mid-stream connection drop), a
+    // SyntaxError from JSON.parse on a truncated SSE chunk, or our own
+    // "Evaluation failed" sentinel -- has no user-friendly wording of its
+    // own, so show the generic retry message instead of leaking raw
+    // browser/parser text.
+    const isServerDetail = e instanceof Error && e.constructor === Error && e.message !== "Evaluation failed";
+    const message = isServerDetail
       ? e.message
       : "Something went wrong while checking your tweet. The check may have taken too long. Please try again.";
     resultDiv.innerHTML = `
