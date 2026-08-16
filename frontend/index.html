@@ -338,8 +338,11 @@
     background: transparent;
     border: 1px solid var(--border-input);
     color: var(--gray-100);
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   }
-  .post-x-btn:hover, .retry-btn:hover { border-color: var(--border-accent); }
+  .retry-btn:hover { border-color: var(--border-accent); }
+  .post-x-btn { border-color: var(--border-accent); color: var(--purple-light); }
+  .post-x-btn:hover { background: #b882ff1f; box-shadow: var(--glow-accent-soft); }
 
   #loading {
     margin-top: 26px;
