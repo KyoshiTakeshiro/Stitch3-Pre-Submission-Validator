@@ -1128,6 +1128,12 @@ async function runEvaluation() {
           await new Promise(resolve => setTimeout(resolve, 350));
         } else if (payload.type === "done") {
           finalData = payload;
+        } else if (payload.type === "error") {
+          // A real backend failure (e.g. Chutes itself timing out) surfaced
+          // mid-stream -- this has an actual detail string, unlike a raw
+          // dropped connection, so show it verbatim rather than falling
+          // back to the generic network-failure message.
+          throw new Error(payload.detail);
         }
       }
     }

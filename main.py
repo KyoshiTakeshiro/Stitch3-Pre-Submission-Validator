@@ -314,7 +314,16 @@ def evaluate(req: EvaluateRequest, request: Request):
     brief = _lookup_brief(req.brief_id)
     prompt_version = brief.get("prompt_version", 1)
 
-    checks = list(run_checks_pessimistic(brief, req.tweet, prompt_version))
+    try:
+        checks = list(run_checks_pessimistic(brief, req.tweet, prompt_version))
+    except Exception:
+        # call_chutes() already retries 3x internally -- reaching here means
+        # Chutes itself is timing out/erroring past that budget. Surface a
+        # real explanation instead of letting the raw exception 500 out.
+        raise HTTPException(
+            status_code=502,
+            detail="The evaluation service is currently slow or unavailable. Please try again in a moment.",
+        )
     meets_brief = len(checks) == NUM_LLM_CHECKS and all(c.verdict == "YES" for c in checks)
     _record_check(_client_ip(request), meets_brief)
 
@@ -339,10 +348,26 @@ def evaluate_stream(req: EvaluateRequest, request: Request):
 
     def event_stream():
         checks: list[CheckResult] = []
-        for result in run_checks_pessimistic(brief, req.tweet, prompt_version):
-            checks.append(result)
-            payload = {"type": "check", "index": len(checks), "verdict": result.verdict}
-            yield f"data: {json.dumps(payload)}\n\n"
+        try:
+            for result in run_checks_pessimistic(brief, req.tweet, prompt_version):
+                checks.append(result)
+                payload = {"type": "check", "index": len(checks), "verdict": result.verdict}
+                yield f"data: {json.dumps(payload)}\n\n"
+        except Exception:
+            # SSE headers are already sent by this point, so a real error
+            # can't be raised as an HTTP status -- emit it as its own event
+            # instead. call_chutes() already retries 3x internally, so
+            # reaching here means Chutes itself is timing out/erroring past
+            # that budget, not a transient blip. Without this, the raw
+            # exception used to crash the stream silently and the frontend
+            # fell back to a generic "took too long" message that hid the
+            # real cause.
+            error_payload = {
+                "type": "error",
+                "detail": "The evaluation service is currently slow or unavailable. Please try again in a moment.",
+            }
+            yield f"data: {json.dumps(error_payload)}\n\n"
+            return
 
         meets_brief = len(checks) == NUM_LLM_CHECKS and all(c.verdict == "YES" for c in checks)
         _record_check(_client_ip(request), meets_brief)
