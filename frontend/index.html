@@ -1016,7 +1016,13 @@ function updateBriefText() {
   const brief = briefs.find(b => b.id === selectedBriefId);
   briefText.innerHTML = brief ? linkifyText(brief.display || brief.brief) : "";
 
-  if (brief && brief.has_brand_overview) {
+  // Shown optimistically by default (most briefs actually have one -- ~78%
+  // as of the last count) rather than hidden until the background
+  // /briefs/brand-overviews fetch confirms it, which used to cause a jarring
+  // pop-in a beat after the brief text rendered. has_brand_overview is only
+  // ever `false` once that fetch has actually confirmed absence for this
+  // brief -- `undefined` (not yet checked) and `true` both render the pill.
+  if (brief && brief.has_brand_overview !== false) {
     brandOverviewLink.href = `${BRAND_OVERVIEW_BASE_URL}/${brief.id}.pdf`;
     brandOverviewLink.style.display = "inline-flex";
   } else {
