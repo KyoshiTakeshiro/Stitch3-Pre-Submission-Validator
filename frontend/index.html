@@ -1253,7 +1253,7 @@ function renderResult(data) {
   // first NO, so a fail can arrive with fewer than NUM_CHECKS checks run --
   // the true denominator is only known once we actually have all of them.
   const hasFullCount = data.checks.length === NUM_CHECKS;
-  const countHtml = hasFullCount ? ` — <span class="count">${passCount}/${NUM_CHECKS} checks passed</span>` : "";
+  const countHtml = hasFullCount ? ` <span class="count">${passCount}/${NUM_CHECKS} checks passed</span>` : "";
 
   const brief = briefs.find(b => b.id === selectedBriefId);
   let disclaimerHtml = "";
