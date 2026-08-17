@@ -446,7 +446,7 @@
      latencies (Chutes has no public per-model load API), shown during
      validation since Chutes' shared/decentralized compute is the single
      biggest factor in how long a check takes. */
-  .chutes-badge { margin-top: 10px; margin-left: 26px; }
+  .chutes-badge { margin-left: 8px; }
   .chutes-badge.status-fast { color: var(--green); }
   .chutes-badge.status-fast .status-dot { background: var(--green); box-shadow: 0 0 6px #34d399aa; }
   .chutes-badge.status-normal { color: var(--purple-light); }
@@ -712,10 +712,10 @@
         <span class="check-dot pending" data-idx="1"></span>
         <span class="check-dot pending" data-idx="2"></span>
         <span class="check-dot pending" data-idx="3"></span>
+        <span id="chutes-badge" class="status-badge chutes-badge" style="display:none;">
+          <span class="status-dot"></span><span id="chutes-badge-text"></span>
+        </span>
       </div>
-      <span id="chutes-badge" class="status-badge chutes-badge" style="display:none;">
-        <span class="status-dot"></span><span id="chutes-badge-text"></span>
-      </span>
     </div>
     <div id="result"></div>
   </div>
