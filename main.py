@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -115,6 +116,46 @@ def parse_verdict(text: str) -> tuple[str, str]:
     return verdict, summary
 
 
+# How congested Chutes' shared compute currently is, inferred from our own
+# recent call latencies -- Chutes has no public per-model load/utilization
+# API we can query (checked their docs: the only utilization endpoints are
+# miner-side and need miner auth), so this is self-measured from real
+# traffic rather than borrowed from an official metric. Records every
+# individual HTTP attempt's wall time (not counting backoff sleeps), so a
+# timeout naturally shows up as a ~60s sample -- exactly the signal we want.
+_CHUTES_LATENCY_WINDOW = 20
+_chutes_latencies: deque[float] = deque(maxlen=_CHUTES_LATENCY_WINDOW)
+_chutes_latency_lock = Lock()
+
+
+def _record_chutes_latency(seconds: float) -> None:
+    with _chutes_latency_lock:
+        _chutes_latencies.append(seconds)
+
+
+def chutes_congestion_state() -> dict:
+    """4-state read on current Chutes responsiveness, based on the average of
+    recent call attempts. Thresholds are calibrated around this project's own
+    documented baseline (~30-45s is normal for a single call on Chutes'
+    shared/decentralized compute, not fast) -- not generic web-latency
+    assumptions."""
+    with _chutes_latency_lock:
+        samples = list(_chutes_latencies)
+    if len(samples) < 3:
+        return {"state": "unknown", "avg_latency": None, "samples": len(samples)}
+
+    avg = sum(samples) / len(samples)
+    if avg < 15:
+        state = "fast"
+    elif avg < 35:
+        state = "normal"
+    elif avg < 55:
+        state = "slow"
+    else:
+        state = "congested"
+    return {"state": state, "avg_latency": round(avg, 1), "samples": len(samples)}
+
+
 def call_chutes(prompt: str) -> str:
     """Call Chutes' chat completions endpoint, matching the real validator's ChuteClient."""
     headers = {
@@ -130,11 +171,14 @@ def call_chutes(prompt: str) -> str:
 
     last_error = None
     for attempt in range(3):
+        start = time.time()
         try:
             resp = requests.post(CHUTES_ENDPOINT, headers=headers, json=payload, timeout=60)
             resp.raise_for_status()
+            _record_chutes_latency(time.time() - start)
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
+            _record_chutes_latency(time.time() - start)
             last_error = e
             if attempt < 2:
                 time.sleep(2 ** attempt)
@@ -306,6 +350,14 @@ def get_brand_overviews():
 @app.get("/stats")
 def get_stats():
     return _load_stats_public()
+
+
+@app.get("/chutes-status")
+def get_chutes_status():
+    """Cheap, local, no external call -- just reads the in-memory rolling
+    latency window, so unlike /evaluate this is safe to poll frequently
+    (e.g. every few seconds while a check is running) without rate limiting."""
+    return chutes_congestion_state()
 
 
 @app.post("/evaluate", response_model=EvaluateResponse)

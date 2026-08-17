@@ -41,6 +41,7 @@
     --gradient-brand: linear-gradient(105deg, #ded2d7 0%, #b882ff 100%);
     --green: #34d399;
     --red: #f87171;
+    --amber: #fbbf24;
     --border-card: #ffffff1a;
     --border-input: #ffffff1f;
     --border-accent: #b882ff59;
@@ -441,6 +442,20 @@
   .status-completed { color: var(--gray-500); }
   .status-completed .status-dot { background: var(--gray-500); }
 
+  /* Chutes congestion badge -- self-measured from our own recent call
+     latencies (Chutes has no public per-model load API), shown during
+     validation since Chutes' shared/decentralized compute is the single
+     biggest factor in how long a check takes. */
+  .chutes-badge { margin-top: 10px; margin-left: 26px; }
+  .chutes-badge.status-fast { color: var(--green); }
+  .chutes-badge.status-fast .status-dot { background: var(--green); box-shadow: 0 0 6px #34d399aa; }
+  .chutes-badge.status-normal { color: var(--purple-light); }
+  .chutes-badge.status-normal .status-dot { background: var(--purple); box-shadow: 0 0 6px #b882ff99; }
+  .chutes-badge.status-slow { color: var(--amber); }
+  .chutes-badge.status-slow .status-dot { background: var(--amber); box-shadow: 0 0 6px #fbbf24aa; }
+  .chutes-badge.status-congested { color: var(--red); }
+  .chutes-badge.status-congested .status-dot { background: var(--red); box-shadow: 0 0 6px #f87171aa; }
+
   .select-wrap { position: relative; }
   .select-trigger {
     margin-top: 0;
@@ -698,6 +713,9 @@
         <span class="check-dot pending" data-idx="2"></span>
         <span class="check-dot pending" data-idx="3"></span>
       </div>
+      <span id="chutes-badge" class="status-badge chutes-badge" style="display:none;">
+        <span class="status-dot"></span><span id="chutes-badge-text"></span>
+      </span>
     </div>
     <div id="result"></div>
   </div>
@@ -758,6 +776,8 @@ const resultDiv = document.getElementById("result");
 const loadingDiv = document.getElementById("loading");
 const loadingText = document.getElementById("loading-text");
 const checkDots = Array.from(document.querySelectorAll(".check-dot"));
+const chutesBadge = document.getElementById("chutes-badge");
+const chutesBadgeText = document.getElementById("chutes-badge-text");
 
 const POOL_LABELS = { tao: "Bittensor", hyperliquid: "Perp DEXs", prediction_markets: "Prediction Markets" };
 const POOL_ORDER = ["tao", "hyperliquid", "prediction_markets"];
@@ -1046,6 +1066,48 @@ function resetCheckDots() {
   loadingText.textContent = "Running validation 1 of 3…";
 }
 
+const CHUTES_STATUS_LABELS = {
+  fast: "Chutes: responding fast",
+  normal: "Chutes: responding normally",
+  slow: "Chutes: slower than usual",
+  congested: "Chutes: congested right now",
+};
+
+let chutesStatusPollId = null;
+
+async function refreshChutesBadge() {
+  try {
+    const resp = await fetch("/chutes-status");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.state === "unknown") {
+      chutesBadge.style.display = "none";
+      return;
+    }
+    chutesBadge.className = `status-badge chutes-badge status-${data.state}`;
+    chutesBadgeText.textContent = CHUTES_STATUS_LABELS[data.state] || data.state;
+    chutesBadge.style.display = "inline-flex";
+  } catch (_) {
+    // Non-critical -- leave whatever was last shown (or hidden) rather than
+    // blocking the actual evaluation over a badge failing to update.
+  }
+}
+
+function startChutesStatusPolling() {
+  refreshChutesBadge();
+  stopChutesStatusPolling();
+  // A full pessimistic pass can take well over a minute -- keep the badge
+  // live throughout the wait, not just as a one-time snapshot at the start.
+  chutesStatusPollId = setInterval(refreshChutesBadge, 4000);
+}
+
+function stopChutesStatusPolling() {
+  if (chutesStatusPollId) {
+    clearInterval(chutesStatusPollId);
+    chutesStatusPollId = null;
+  }
+}
+
 function updateCheckDots(index, verdict) {
   const dot = checkDots[index - 1];
   if (!dot) return;
@@ -1079,6 +1141,7 @@ async function runEvaluation() {
   loadingDiv.style.display = "flex";
   resultDiv.innerHTML = "";
   resetCheckDots();
+  startChutesStatusPolling();
 
   try {
     const resp = await fetch("/evaluate/stream", {
@@ -1164,6 +1227,7 @@ async function runEvaluation() {
   } finally {
     evaluateBtn.disabled = false;
     loadingDiv.style.display = "none";
+    stopChutesStatusPolling();
   }
 }
 
