@@ -141,7 +141,7 @@ def chutes_congestion_state() -> dict:
     assumptions."""
     with _chutes_latency_lock:
         samples = list(_chutes_latencies)
-    if len(samples) < 3:
+    if len(samples) < 1:
         return {"state": "unknown", "avg_latency": None, "samples": len(samples)}
 
     avg = sum(samples) / len(samples)

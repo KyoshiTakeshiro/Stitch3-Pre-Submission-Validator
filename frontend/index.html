@@ -447,6 +447,8 @@
      validation since Chutes' shared/decentralized compute is the single
      biggest factor in how long a check takes. */
   .chutes-badge { margin-left: 8px; }
+  .chutes-badge.status-unknown { color: var(--gray-500); }
+  .chutes-badge.status-unknown .status-dot { background: var(--gray-500); animation: pulse 1.1s ease-in-out infinite; }
   .chutes-badge.status-fast { color: var(--green); }
   .chutes-badge.status-fast .status-dot { background: var(--green); box-shadow: 0 0 6px #34d399aa; }
   .chutes-badge.status-normal { color: var(--purple-light); }
@@ -1071,6 +1073,7 @@ const CHUTES_STATUS_LABELS = {
   normal: "Chutes: responding normally",
   slow: "Chutes: slower than usual",
   congested: "Chutes: congested right now",
+  unknown: "Chutes: measuring response time…",
 };
 
 let chutesStatusPollId = null;
@@ -1080,10 +1083,6 @@ async function refreshChutesBadge() {
     const resp = await fetch("/chutes-status");
     if (!resp.ok) return;
     const data = await resp.json();
-    if (data.state === "unknown") {
-      chutesBadge.style.display = "none";
-      return;
-    }
     chutesBadge.className = `status-badge chutes-badge status-${data.state}`;
     chutesBadgeText.textContent = CHUTES_STATUS_LABELS[data.state] || data.state;
     chutesBadge.style.display = "inline-flex";
@@ -1094,6 +1093,12 @@ async function refreshChutesBadge() {
 }
 
 function startChutesStatusPolling() {
+  // Show the neutral "measuring" state immediately rather than waiting on
+  // the first fetch to resolve, so the badge is visible from the instant
+  // the loading UI appears rather than popping in a beat later.
+  chutesBadge.className = "status-badge chutes-badge status-unknown";
+  chutesBadgeText.textContent = CHUTES_STATUS_LABELS.unknown;
+  chutesBadge.style.display = "inline-flex";
   refreshChutesBadge();
   stopChutesStatusPolling();
   // A full pessimistic pass can take well over a minute -- keep the badge
