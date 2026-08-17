@@ -449,8 +449,9 @@
      biggest factor in how long a check takes. */
   .chutes-badge-row { display: flex; justify-content: flex-end; margin-top: 10px; }
   .chutes-badge { margin-left: 0; }
+  .chutes-badge .status-dot { animation: pulse 1.1s ease-in-out infinite; }
   .chutes-badge.status-unknown { color: var(--gray-500); }
-  .chutes-badge.status-unknown .status-dot { background: var(--gray-500); animation: pulse 1.1s ease-in-out infinite; }
+  .chutes-badge.status-unknown .status-dot { background: var(--gray-500); }
   .chutes-badge.status-fast { color: var(--green); }
   .chutes-badge.status-fast .status-dot { background: var(--green); box-shadow: 0 0 6px #34d399aa; }
   .chutes-badge.status-normal { color: var(--purple-light); }
