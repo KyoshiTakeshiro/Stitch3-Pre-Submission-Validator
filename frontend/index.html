@@ -253,7 +253,13 @@
     flex-shrink: 0;
   }
   .update-banner-toggle:hover { filter: brightness(1.08); }
-  .update-banner-details { padding: 10px 14px; border-top: 1px solid var(--border-card); }
+  .update-banner-details {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border-card);
+    max-height: 230px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
   .update-banner-details p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--gray-400); }
   .update-banner-details p:last-child { margin-bottom: 0; }
   .update-banner-details strong { color: var(--purple-light); }
@@ -272,6 +278,7 @@
     color: var(--text-on-brand);
     vertical-align: middle;
   }
+  .update-item-date { font-size: 11px; color: var(--gray-500); white-space: nowrap; }
 
   .card {
     background: var(--black-1);
@@ -698,6 +705,16 @@
     .intro { margin: 12px 0 16px; font-size: 14px; }
     .site-header { margin-bottom: 4px; }
     .site-footer { margin-top: 14px; padding-top: 10px; }
+    /* Pill radius only reads well on a single line -- once the longer
+       summary text wraps at this width, the fully-rounded ends started
+       eating into the text, so drop back to a normal rounded rect. */
+    .update-banner { border-radius: var(--radius-control); }
+    .update-banner:has(.update-banner-details[style*="block"]) { border-radius: var(--radius-control); }
+    .update-banner-row { padding: 8px 10px; gap: 6px; }
+    .update-banner-text { font-size: 11px; }
+    .update-banner-icon { width: 13px; height: 13px; }
+    .update-banner-toggle { padding: 2px 7px; font-size: 10px; }
+    .update-banner-details { padding: 8px 10px; }
     /* Fixed height:1000px (desktop) forces background-size:cover to zoom in
        drastically once width shrinks to mobile's narrower 220vw cap, cropping
        the glow's visible orb out of frame. Scale height down to roughly match
@@ -1451,7 +1468,16 @@ function initUpdateBanner() {
 
   function renderSummary() {
     const unseenCount = activeItems.filter(item => !seenIds.includes(item.id)).length;
-    const summaryPrefix = activeItems.length === 1 ? "Bitcast Validator Update:" : "Bitcast Validator Updates:";
+    // "Protocol" (not "Validator") avoids colliding with this tool's own
+    // name, Stitch3 Validator -- "Bitcast Validator Updates" on a page
+    // titled "Stitch3 Validator" could read as "this tool changed" instead
+    // of "the real Bitcast protocol changed". Narrow screens drop "Bitcast
+    // Protocol" entirely -- the full phrase plus the rest of the sentence
+    // wraps awkwardly at mobile widths, and "Update(s):" alone still reads
+    // clearly right next to the bell icon.
+    const isMobile = window.innerWidth <= 480;
+    const prefixWord = activeItems.length === 1 ? "Update:" : "Updates:";
+    const summaryPrefix = isMobile ? prefixWord : `Bitcast Protocol ${prefixWord}`;
     const summaryRest = unseenCount > 0
       ? (activeItems.length === 1
           ? ` ${activeItems[0].title.replace(/\.$/, "").toLowerCase()}.`
@@ -1460,13 +1486,21 @@ function initUpdateBanner() {
     summaryEl.innerHTML = `<span class="update-banner-prefix">${summaryPrefix}</span>${summaryRest}`;
   }
 
+  function relativeDate(dateStr) {
+    const days = Math.floor((now - new Date(`${dateStr}T00:00:00Z`).getTime()) / (24 * 60 * 60 * 1000));
+    if (days <= 0) return "Today";
+    if (days === 1) return "1d ago";
+    return `${days}d ago`;
+  }
+
   function renderDetails() {
     detailsEl.innerHTML = activeItems.map(item => {
       const badge = seenIds.includes(item.id) ? "" : '<span class="update-item-new">NEW</span> ';
       const titleHtml = item.url
         ? `<a href="${item.url}" target="_blank" rel="noopener" class="update-item-link"><strong>${item.title}</strong></a>`
         : `<strong>${item.title}</strong>`;
-      return `<p data-item-id="${item.id}">${badge}${titleHtml}<br>${item.text}</p>`;
+      const dateHtml = `<span class="update-item-date">${relativeDate(item.date)}</span>`;
+      return `<p data-item-id="${item.id}">${badge}${titleHtml} ${dateHtml}<br>${item.text}</p>`;
     }).join("");
   }
 
@@ -1479,6 +1513,12 @@ function initUpdateBanner() {
 
   renderSummary();
   banner.style.display = "block";
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderSummary, 150);
+  });
 
   banner.querySelector(".update-banner-toggle").addEventListener("click", () => {
     const isOpen = detailsEl.style.display !== "none";
