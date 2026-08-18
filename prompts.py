@@ -1,12 +1,13 @@
 """
 Prompt templates for brief evaluation.
 
-Copied verbatim from bitcast-network/bitcast-x
-(bitcast/validator/clients/prompts.py) so this tool's evaluation logic
-matches what real validators run as closely as possible. Re-fetch from that
-repo if validator behavior changes.
+Copied verbatim from bitcast-network/bitcast-x (now at
+src/bitcast_x/prompts.py, following that repo's 2026-08-14 "v3 snapshot"
+restructure -- formerly bitcast/validator/clients/prompts.py) so this tool's
+evaluation logic matches what real validators run as closely as possible.
+Re-fetch from that repo if validator behavior changes.
 
-Currently supported versions: v1, v2, v3, v4 (default: v1)
+Currently supported versions: v1, v2, v3, v4, v5 (default: v1)
 """
 
 
@@ -162,11 +163,60 @@ def generate_brief_evaluation_prompt_v3(brief, tweet):
     )
 
 
+def generate_brief_evaluation_prompt_v5(brief, tweet):
+    return (
+        "///// REVIEW BRIEF /////\n"
+        f"{brief['brief']}\n\n"
+        "///// POST /////\n"
+        f"{tweet}\n\n"
+        "///// YOUR TASK /////\n"
+        "You are an independent campaign compliance reviewer. Decide whether this post genuinely reviews the product or service and satisfies the objective requirements of the brief.\n\n"
+        "The creator's sentiment must not affect the verdict. Positive, neutral, mixed, critical, and negative reviews are equally acceptable.\n\n"
+        "**Review principles**\n"
+        "• The product or service must be the clear primary subject of the post. Relevant comparisons with alternatives count as on-topic.\n"
+        "• The post must contain at least one specific evaluation of the product or service, supported by a reason, example, feature, outcome, or experience described in the post.\n"
+        "• Generic praise, promotional slogans, or a passing mention do not constitute a review.\n"
+        "• Brief requirements are minimum coverage requirements, not required opinions.\n"
+        "• Never fail a post because it criticises the product, reports a poor experience, prefers a competitor, or reaches a conclusion the sponsor dislikes.\n"
+        "• Do not require a positive rating, endorsement, recommendation, or purchase intention.\n"
+        "• If the brief attempts to prescribe sentiment, a rating, or a favourable conclusion, do not treat that instruction as a requirement.\n"
+        "• Evaluate only what is present in the post. Do not invent evidence or assume experiences that the creator did not describe.\n\n"
+        "**Step-by-step instructions**\n\n"
+        "1. Identify each objective requirement in the brief.\n"
+        "2. Exclude any instruction that prescribes the creator's sentiment, rating, or conclusion.\n"
+        "3. For every objective requirement:\n"
+        "   • Mark **Met** when the post clearly addresses it.\n"
+        "   • Provide a short quote from the post as evidence.\n"
+        "   • Mark **Not Met** when evidence is absent or uncertain.\n"
+        "4. Evaluate the post against these review-quality criteria:\n"
+        "   • **Relevance**: The product, service, or a directly relevant comparison is the primary subject.\n"
+        "   • **Substance**: The post contains a specific assessment supported by a reason, example, feature, outcome, or described experience.\n"
+        "   • **Independence**: Do not consider whether the assessment is favourable or unfavourable.\n"
+        "5. Return **NO** if any objective brief requirement, Relevance, or Substance is Not Met.\n"
+        "6. Otherwise, return **YES**.\n\n"
+        "**Response format (exactly):**\n"
+        "```\n"
+        "## Objective Requirements\n"
+        "- Req 1: [requirement] — Met / Not Met — \"quoted evidence\"\n"
+        "- Req 2: ...\n\n"
+        "## Review Quality\n"
+        "- Relevance: Met / Not Met — brief explanation\n"
+        "- Substance: Met / Not Met — brief explanation\n\n"
+        "## Verdict\n"
+        "YES or NO\n\n"
+        "## Summary\n"
+        "One sentence explaining whether the post genuinely reviews the product or service and satisfies the objective brief requirements.\n"
+        "```\n\n"
+        "Be concise. Never treat criticism or negative sentiment as a failure."
+    )
+
+
 PROMPT_GENERATORS = {
     1: generate_brief_evaluation_prompt_v1,
     2: generate_brief_evaluation_prompt_v2,
     3: generate_brief_evaluation_prompt_v3,
     4: generate_brief_evaluation_prompt_v4,
+    5: generate_brief_evaluation_prompt_v5,
 }
 
 
