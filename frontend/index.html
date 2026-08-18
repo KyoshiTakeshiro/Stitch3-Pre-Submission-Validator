@@ -240,33 +240,25 @@
   .update-banner-icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--purple-light); }
   .update-banner-text { flex: 1; font-size: 12px; color: var(--gray-400); }
   .update-banner-prefix { color: var(--purple-light); font-weight: 600; }
-  .update-banner-toggle, .update-banner-dismiss {
+  .update-banner-toggle {
     margin: 0;
     padding: 2px 8px;
     font-size: 11px;
-    font-weight: 500;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--border-input);
-    background: transparent;
-    color: var(--gray-500);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .update-banner-toggle {
     font-weight: 600;
+    border-radius: var(--radius-pill);
     border: none;
     background: var(--gradient-brand);
     color: var(--text-on-brand);
+    cursor: pointer;
+    flex-shrink: 0;
   }
-  .update-banner-dismiss { padding: 2px 7px; }
   .update-banner-toggle:hover { filter: brightness(1.08); }
-  .update-banner-dismiss:hover { border-color: var(--border-accent); color: var(--gray-400); }
   .update-banner-details { padding: 10px 14px; border-top: 1px solid var(--border-card); }
   .update-banner-details p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--gray-400); }
   .update-banner-details p:last-child { margin-bottom: 0; }
-  .update-banner-details strong { color: var(--gray-400); }
+  .update-banner-details strong { color: var(--purple-light); }
   .update-item-link { text-decoration: none; }
-  .update-item-link:hover strong { color: var(--purple-light); text-decoration: underline; }
+  .update-item-link:hover strong { text-decoration: underline; }
   .update-item-new {
     display: inline-block;
     margin-right: 6px;
@@ -752,7 +744,6 @@
       <svg class="update-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
       <span class="update-banner-text" id="update-banner-summary"></span>
       <button type="button" class="update-banner-toggle">Details</button>
-      <button type="button" class="update-banner-dismiss" aria-label="Dismiss">✕</button>
     </div>
     <div class="update-banner-details" id="update-banner-details" style="display:none;"></div>
   </div>
@@ -1441,43 +1432,75 @@ function initUpdateBanner() {
     .sort((a, b) => b.date.localeCompare(a.date));
   if (activeItems.length === 0) return; // nothing within the window -- banner stays hidden
 
+  // No dismiss control -- the banner isn't closeable, it just stays present
+  // across sessions as long as any item is within its 7-day window. "Seen"
+  // is tracked per-item instead, driven by actually scrolling an item into
+  // view inside the open details panel (see the IntersectionObserver below),
+  // not by a single blanket dismiss action.
   let seenIds = [];
   try {
     seenIds = JSON.parse(localStorage.getItem("stitch3-seen-update-ids") || "[]");
   } catch (e) {
     seenIds = [];
   }
-  const unseenItems = activeItems.filter(item => !seenIds.includes(item.id));
-  if (unseenItems.length === 0) return; // everything currently active has already been dismissed
 
   const banner = document.getElementById("update-banner");
   const summaryEl = document.getElementById("update-banner-summary");
   const detailsEl = document.getElementById("update-banner-details");
+  let observer = null;
 
-  const summaryPrefix = unseenItems.length === 1 ? "Bitcast Validator Update:" : "Bitcast Validator Updates:";
-  const summaryRest = unseenItems.length === 1
-    ? ` ${unseenItems[0].title.replace(/\.$/, "").toLowerCase()}.`
-    : ` ${unseenItems.length} new changes worth a look.`;
-  summaryEl.innerHTML = `<span class="update-banner-prefix">${summaryPrefix}</span>${summaryRest}`;
+  function renderSummary() {
+    const unseenCount = activeItems.filter(item => !seenIds.includes(item.id)).length;
+    const summaryPrefix = activeItems.length === 1 ? "Bitcast Validator Update:" : "Bitcast Validator Updates:";
+    const summaryRest = unseenCount > 0
+      ? (activeItems.length === 1
+          ? ` ${activeItems[0].title.replace(/\.$/, "").toLowerCase()}.`
+          : ` ${unseenCount} new of ${activeItems.length} worth a look.`)
+      : ` ${activeItems.length} recent change${activeItems.length === 1 ? "" : "s"}.`;
+    summaryEl.innerHTML = `<span class="update-banner-prefix">${summaryPrefix}</span>${summaryRest}`;
+  }
 
-  detailsEl.innerHTML = activeItems.map(item => {
-    const badge = seenIds.includes(item.id) ? "" : '<span class="update-item-new">NEW</span> ';
-    const titleHtml = item.url
-      ? `<a href="${item.url}" target="_blank" rel="noopener" class="update-item-link"><strong>${item.title}</strong></a>`
-      : `<strong>${item.title}</strong>`;
-    return `<p>${badge}${titleHtml}<br>${item.text}</p>`;
-  }).join("");
+  function renderDetails() {
+    detailsEl.innerHTML = activeItems.map(item => {
+      const badge = seenIds.includes(item.id) ? "" : '<span class="update-item-new">NEW</span> ';
+      const titleHtml = item.url
+        ? `<a href="${item.url}" target="_blank" rel="noopener" class="update-item-link"><strong>${item.title}</strong></a>`
+        : `<strong>${item.title}</strong>`;
+      return `<p data-item-id="${item.id}">${badge}${titleHtml}<br>${item.text}</p>`;
+    }).join("");
+  }
 
+  function markSeen(id) {
+    if (seenIds.includes(id)) return;
+    seenIds.push(id);
+    localStorage.setItem("stitch3-seen-update-ids", JSON.stringify(seenIds));
+    renderSummary();
+  }
+
+  renderSummary();
   banner.style.display = "block";
 
   banner.querySelector(".update-banner-toggle").addEventListener("click", () => {
     const isOpen = detailsEl.style.display !== "none";
-    detailsEl.style.display = isOpen ? "none" : "block";
-  });
-  banner.querySelector(".update-banner-dismiss").addEventListener("click", () => {
-    const allSeen = Array.from(new Set([...seenIds, ...activeItems.map(item => item.id)]));
-    localStorage.setItem("stitch3-seen-update-ids", JSON.stringify(allSeen));
-    banner.style.display = "none";
+    if (isOpen) {
+      detailsEl.style.display = "none";
+      if (observer) observer.disconnect();
+      return;
+    }
+    // Re-render on every open (not just once) so items marked seen earlier
+    // in this same session no longer show NEW the next time this opens.
+    renderDetails();
+    detailsEl.style.display = "block";
+    if (observer) observer.disconnect();
+    observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          markSeen(entry.target.dataset.itemId);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.6 });
+    detailsEl.querySelectorAll("p[data-item-id]").forEach(p => observer.observe(p));
   });
 }
 
