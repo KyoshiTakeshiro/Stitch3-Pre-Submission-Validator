@@ -219,6 +219,51 @@
 
   .intro { margin: 20px 0 28px; font-size: 15px; color: var(--gray-400); }
 
+  /* Muted, dismissible notice about upstream validator behavior changes --
+     deliberately understated (small text, thin border, no accent color)
+     since it's informational, not an alert. Collapsed detail by default so
+     it takes almost no vertical space unless the user opts in. */
+  .update-banner {
+    margin: 0 0 20px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-control);
+    background: var(--black-1);
+  }
+  .update-banner-row { display: flex; align-items: center; gap: 10px; }
+  .update-banner-text { flex: 1; font-size: 12px; color: var(--gray-500); }
+  .update-banner-toggle, .update-banner-dismiss {
+    margin: 0;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-input);
+    background: transparent;
+    color: var(--gray-500);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .update-banner-dismiss { padding: 2px 7px; }
+  .update-banner-toggle:hover, .update-banner-dismiss:hover { border-color: var(--border-accent); color: var(--gray-400); }
+  .update-banner-details { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-card); }
+  .update-banner-details p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--gray-500); }
+  .update-banner-details p:last-child { margin-bottom: 0; }
+  .update-banner-details strong { color: var(--gray-400); }
+  .update-item-new {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    border-radius: var(--radius-pill);
+    background: var(--purple);
+    color: var(--text-on-brand);
+    vertical-align: middle;
+  }
+
   .card {
     background: var(--black-1);
     border: 1px solid var(--border-card);
@@ -684,6 +729,15 @@
   </div>
 
   <p class="intro">Choose your campaign brief, paste your draft tweet, and check if it would pass validator review before posting it on X.</p>
+
+  <div id="update-banner" class="update-banner" style="display:none;">
+    <div class="update-banner-row">
+      <span class="update-banner-text" id="update-banner-summary"></span>
+      <button type="button" class="update-banner-toggle">Details</button>
+      <button type="button" class="update-banner-dismiss" aria-label="Dismiss">✕</button>
+    </div>
+    <div class="update-banner-details" id="update-banner-details" style="display:none;"></div>
+  </div>
 
   <div class="card">
     <label class="field-label">Ecosystem</label>
@@ -1327,6 +1381,80 @@ function loadStats() {
 
 loadBriefs();
 loadStats();
+
+// Running list of upstream Bitcast-validator-behavior notes worth surfacing to
+// miners. Add new entries here (e.g. from the daily fidelity-check routine's
+// draft banner snippets) -- each needs a stable unique id, the date it was
+// added (YYYY-MM-DD), a short bold title, and a plain-English sentence or two.
+// Items older than UPDATE_ITEM_MAX_AGE_DAYS age out automatically, so nothing
+// needs to be manually removed later.
+const UPDATE_ITEMS = [
+  {
+    id: "2026-08-18-honest-reviews",
+    date: "2026-08-18",
+    title: "Honest reviews now allowed.",
+    text: "Some campaigns ask for genuine product/service reviews. Sentiment no longer affects the check — a real, substantive review passes even if it's critical, as long as it's actually about the product.",
+  },
+  {
+    id: "2026-08-18-rank-cutoffs",
+    date: "2026-08-18",
+    title: "Rank cutoffs on some campaigns.",
+    text: "Certain campaigns now cap how many creators can earn from them. If a campaign sets a member limit, only the highest-ranked creators (by influence) within that cap get counted — even if your tweet fully meets the brief.",
+  },
+  {
+    id: "2026-08-18-deferred-scoring",
+    date: "2026-08-18",
+    title: "One bad tweet won't sink the batch.",
+    text: "If the validator hits a temporary hiccup checking one tweet during final scoring, it now sets that tweet aside and keeps going, instead of risking everyone else's scoring in the same run.",
+  },
+];
+const UPDATE_ITEM_MAX_AGE_DAYS = 7;
+
+function initUpdateBanner() {
+  const maxAgeMs = UPDATE_ITEM_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  // Sort newest-first so the details list (and the "N new" count) read naturally.
+  const activeItems = UPDATE_ITEMS
+    .filter(item => now - new Date(`${item.date}T00:00:00Z`).getTime() <= maxAgeMs)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (activeItems.length === 0) return; // nothing within the window -- banner stays hidden
+
+  let seenIds = [];
+  try {
+    seenIds = JSON.parse(localStorage.getItem("stitch3-seen-update-ids") || "[]");
+  } catch (e) {
+    seenIds = [];
+  }
+  const unseenItems = activeItems.filter(item => !seenIds.includes(item.id));
+  if (unseenItems.length === 0) return; // everything currently active has already been dismissed
+
+  const banner = document.getElementById("update-banner");
+  const summaryEl = document.getElementById("update-banner-summary");
+  const detailsEl = document.getElementById("update-banner-details");
+
+  summaryEl.textContent = unseenItems.length === 1
+    ? `Bitcast validator update: ${unseenItems[0].title.replace(/\.$/, "").toLowerCase()}.`
+    : `Bitcast validator updates: ${unseenItems.length} new changes worth a look.`;
+
+  detailsEl.innerHTML = activeItems.map(item => {
+    const badge = seenIds.includes(item.id) ? "" : '<span class="update-item-new">NEW</span> ';
+    return `<p>${badge}<strong>${item.title}</strong> ${item.text}</p>`;
+  }).join("");
+
+  banner.style.display = "block";
+
+  banner.querySelector(".update-banner-toggle").addEventListener("click", () => {
+    const isOpen = detailsEl.style.display !== "none";
+    detailsEl.style.display = isOpen ? "none" : "block";
+  });
+  banner.querySelector(".update-banner-dismiss").addEventListener("click", () => {
+    const allSeen = Array.from(new Set([...seenIds, ...activeItems.map(item => item.id)]));
+    localStorage.setItem("stitch3-seen-update-ids", JSON.stringify(allSeen));
+    banner.style.display = "none";
+  });
+}
+
+initUpdateBanner();
 </script>
 </body>
 </html>
