@@ -26,7 +26,13 @@ from prompts import generate_brief_evaluation_prompt
 
 load_dotenv()
 
-BITCAST_BRIEFS_ENDPOINT = "https://bitcast-api.bitcast.network/api/v2/validator/x-briefs"
+# Upstream retired this endpoint's data feed after their Aug 14 rewrite -- it
+# still 200s but silently stopped receiving new campaigns, topping out at
+# 074_nodexo (confirmed live: 075_bitcast through 079_green_compute exist on
+# the new endpoint below but never appeared here). Kept only as a comment so
+# the dead end isn't rediscovered from scratch if this ever needs revisiting:
+# "https://bitcast-api.bitcast.network/api/v2/validator/x-briefs"
+BITCAST_CAMPAIGN_MANIFEST_ENDPOINT = "https://bitcast-api.bitcast.network/api/v2/public/x/campaign-manifest-v4"
 BRAND_OVERVIEW_BASE_URL = "https://brand-overviews-x.s3.us-west-2.amazonaws.com"
 CHUTES_ENDPOINT = "https://llm.chutes.ai/v1/chat/completions"
 CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
@@ -224,10 +230,47 @@ def run_checks_pessimistic(brief: dict, tweet: str, prompt_version: int):
         executor.shutdown(wait=False)
 
 
-def _lookup_brief(brief_id: str) -> dict:
-    resp = requests.get(BITCAST_BRIEFS_ENDPOINT, timeout=10)
+def _fetch_normalized_briefs() -> list[dict]:
+    """Fetch the live campaign manifest and flatten each entry into the flat
+    shape the rest of this app expects (id/pool/start_date/end_date/display/
+    brief/tag/prompt_version) -- the manifest nests campaign_id under
+    "access", uses a "pools" array (always length 1 in practice) instead of
+    a single "pool" string, and "opens_at"/"closes_at" full timestamps
+    instead of date-only "start_date"/"end_date" strings."""
+    resp = requests.get(BITCAST_CAMPAIGN_MANIFEST_ENDPOINT, timeout=10)
     resp.raise_for_status()
-    briefs = resp.json().get("items", [])
+    campaigns = resp.json().get("campaigns", [])
+    briefs = []
+    for c in campaigns:
+        # "indie_hacker" is a brand-new pool that only ever had one campaign
+        # (078_stitch3, using the new preclaim_v2 mining_protocol, a 1-day
+        # window, and asking creators to review Stitch3 itself) -- it isn't
+        # visible on Bitcast's own website, so it reads as an internal pilot
+        # for the new protocol rather than a real public campaign. Hold this
+        # pool back until it's confirmed live there; remove this filter once
+        # it is.
+        if "indie_hacker" in (c.get("pools") or []):
+            continue
+        access = c.get("access", {})
+        briefs.append({
+            "id": access.get("campaign_id"),
+            "pool": (c.get("pools") or [None])[0],
+            "start_date": (c.get("opens_at") or "")[:10],
+            "end_date": (c.get("closes_at") or "")[:10],
+            "display": c.get("display", ""),
+            "brief": c.get("brief", ""),
+            "tag": c.get("tag"),
+            "prompt_version": c.get("prompt_version", 1),
+            # Not consumed by the frontend today -- kept in case exclusive
+            # campaigns (only one specific miner hotkey may submit) ever
+            # need to be filtered out or flagged in the UI.
+            "exclusive_miner_hotkey": access.get("exclusive_miner_hotkey"),
+        })
+    return briefs
+
+
+def _lookup_brief(brief_id: str) -> dict:
+    briefs = _fetch_normalized_briefs()
     brief = next((b for b in briefs if b["id"] == brief_id), None)
     if brief is None:
         raise HTTPException(status_code=404, detail=f"Brief '{brief_id}' not found")
@@ -310,9 +353,7 @@ def _get_cached_briefs() -> list[dict]:
     if _briefs_cache["data"] is not None and now < _briefs_cache["expires_at"]:
         return _briefs_cache["data"]
 
-    resp = requests.get(BITCAST_BRIEFS_ENDPOINT, timeout=10)
-    resp.raise_for_status()
-    items = resp.json().get("items", [])
+    items = _fetch_normalized_briefs()
 
     _briefs_cache["data"] = items
     _briefs_cache["expires_at"] = now + BRIEFS_CACHE_TTL
@@ -333,9 +374,7 @@ def get_brand_overviews():
     if _overview_cache["data"] is not None and now < _overview_cache["expires_at"]:
         return _overview_cache["data"]
 
-    resp = requests.get(BITCAST_BRIEFS_ENDPOINT, timeout=10)
-    resp.raise_for_status()
-    items = resp.json().get("items", [])
+    items = _fetch_normalized_briefs()
     ids = [b["id"] for b in items]
 
     with ThreadPoolExecutor(max_workers=len(ids) or 1) as executor:
