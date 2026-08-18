@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 import time
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -116,31 +115,24 @@ def parse_verdict(text: str) -> tuple[str, str]:
     return verdict, summary
 
 
-# How congested Chutes' shared compute currently is, inferred from our own
-# recent call latencies -- Chutes has no public per-model load/utilization
-# API we can query (checked their docs: the only utilization endpoints are
-# miner-side and need miner auth), so this is self-measured from real
-# traffic rather than borrowed from an official metric. Records every
-# individual HTTP attempt's wall time (not counting backoff sleeps), so a
-# timeout naturally shows up as a ~60s sample -- exactly the signal we want.
-_CHUTES_LATENCY_WINDOW = 20
-_chutes_latencies: deque[float] = deque(maxlen=_CHUTES_LATENCY_WINDOW)
-_chutes_latency_lock = Lock()
-
-
-def _record_chutes_latency(seconds: float) -> None:
-    with _chutes_latency_lock:
-        _chutes_latencies.append(seconds)
-
-
-def chutes_congestion_state() -> dict:
-    """4-state read on current Chutes responsiveness, based on the average of
-    recent call attempts. Thresholds are calibrated around this project's own
-    documented baseline (~30-45s is normal for a single call on Chutes'
-    shared/decentralized compute, not fast) -- not generic web-latency
-    assumptions."""
-    with _chutes_latency_lock:
-        samples = list(_chutes_latencies)
+# How congested Chutes' shared compute currently is, inferred from call
+# latencies within the *current evaluation only* -- Chutes has no public
+# per-model load/utilization API we can query (checked their docs: the only
+# utilization endpoints are miner-side and need miner auth), so this is
+# self-measured from real traffic rather than borrowed from an official
+# metric. Deliberately scoped per-request (a plain list threaded through the
+# call chain) rather than a shared global window: a process-wide window mixes
+# in stale samples from other visitors' evaluations and from attempts made
+# minutes ago, which showed up as a misleading "slower than usual" badge
+# during a run that was actually fast throughout. Records every individual
+# HTTP attempt's wall time (not counting backoff sleeps), so a timeout
+# naturally shows up as a ~60s sample -- exactly the signal we want.
+def chutes_congestion_state(samples: list[float]) -> dict:
+    """4-state read on Chutes responsiveness so far in this evaluation, based
+    on the average of its own call attempts. Thresholds are calibrated
+    around this project's own documented baseline (~30-45s is normal for a
+    single call on Chutes' shared/decentralized compute, not fast) -- not
+    generic web-latency assumptions."""
     if len(samples) < 1:
         return {"state": "unknown", "avg_latency": None, "samples": len(samples)}
 
@@ -156,8 +148,11 @@ def chutes_congestion_state() -> dict:
     return {"state": state, "avg_latency": round(avg, 1), "samples": len(samples)}
 
 
-def call_chutes(prompt: str) -> str:
-    """Call Chutes' chat completions endpoint, matching the real validator's ChuteClient."""
+def call_chutes(prompt: str, latencies: list[float]) -> str:
+    """Call Chutes' chat completions endpoint, matching the real validator's
+    ChuteClient. `latencies` is the calling evaluation's own list (see above)
+    -- list.append() is atomic under the GIL, so concurrent checks sharing it
+    from separate threads need no extra lock."""
     headers = {
         "Authorization": f"Bearer {CHUTES_API_KEY}",
         "Content-Type": "application/json",
@@ -175,30 +170,34 @@ def call_chutes(prompt: str) -> str:
         try:
             resp = requests.post(CHUTES_ENDPOINT, headers=headers, json=payload, timeout=60)
             resp.raise_for_status()
-            _record_chutes_latency(time.time() - start)
+            latencies.append(time.time() - start)
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
-            _record_chutes_latency(time.time() - start)
+            latencies.append(time.time() - start)
             last_error = e
             if attempt < 2:
                 time.sleep(2 ** attempt)
     raise last_error
 
 
-def run_single_check(brief: dict, tweet: str, prompt_version: int, check_num: int) -> CheckResult:
+def run_single_check(
+    brief: dict, tweet: str, prompt_version: int, check_num: int, latencies: list[float]
+) -> CheckResult:
     # Real validator appends " {check_num}" to bust its LLM cache so each of the
     # NUM_LLM_CHECKS runs is an independent judgment rather than a repeat of the
     # same deterministic (temperature=0) response. Replicated here for the same
     # reason: without it, our "best of 3" carries far less real variance.
     variant_tweet = f"{tweet} {check_num}"
     prompt = generate_brief_evaluation_prompt(brief, variant_tweet, version=prompt_version)
-    text = call_chutes(prompt)
+    text = call_chutes(prompt, latencies)
     verdict, summary = parse_verdict(text)
     return CheckResult(verdict=verdict, summary=summary, raw_response=text)
 
 
 def run_checks_pessimistic(brief: dict, tweet: str, prompt_version: int):
-    """Yield each CheckResult as it completes, stopping at the first NO.
+    """Yield (CheckResult, chutes_state) as each check completes, stopping at
+    the first NO. chutes_state reflects only this evaluation's own call
+    attempts so far (see chutes_congestion_state above), not other traffic.
 
     Deliberately stricter than the real validator's own optimistic
     (any-YES-wins) best-of-3: a single NO here already means meets_brief
@@ -209,15 +208,16 @@ def run_checks_pessimistic(brief: dict, tweet: str, prompt_version: int):
     purpose -- see project notes for why (false positives here are far
     more costly to a miner than false negatives).
     """
+    latencies: list[float] = []
     executor = ThreadPoolExecutor(max_workers=NUM_LLM_CHECKS)
     futures = [
-        executor.submit(run_single_check, brief, tweet, prompt_version, check_num)
+        executor.submit(run_single_check, brief, tweet, prompt_version, check_num, latencies)
         for check_num in range(1, NUM_LLM_CHECKS + 1)
     ]
     try:
         for future in as_completed(futures):
             result = future.result()
-            yield result
+            yield result, chutes_congestion_state(latencies)
             if result.verdict != "YES":
                 break
     finally:
@@ -352,14 +352,6 @@ def get_stats():
     return _load_stats_public()
 
 
-@app.get("/chutes-status")
-def get_chutes_status():
-    """Cheap, local, no external call -- just reads the in-memory rolling
-    latency window, so unlike /evaluate this is safe to poll frequently
-    (e.g. every few seconds while a check is running) without rate limiting."""
-    return chutes_congestion_state()
-
-
 @app.post("/evaluate", response_model=EvaluateResponse)
 def evaluate(req: EvaluateRequest, request: Request):
     _enforce_rate_limit(request)
@@ -367,7 +359,7 @@ def evaluate(req: EvaluateRequest, request: Request):
     prompt_version = brief.get("prompt_version", 1)
 
     try:
-        checks = list(run_checks_pessimistic(brief, req.tweet, prompt_version))
+        checks = [result for result, _ in run_checks_pessimistic(brief, req.tweet, prompt_version)]
     except Exception:
         # call_chutes() already retries 3x internally -- reaching here means
         # Chutes itself is timing out/erroring past that budget. Surface a
@@ -401,9 +393,15 @@ def evaluate_stream(req: EvaluateRequest, request: Request):
     def event_stream():
         checks: list[CheckResult] = []
         try:
-            for result in run_checks_pessimistic(brief, req.tweet, prompt_version):
+            for result, chutes_state in run_checks_pessimistic(brief, req.tweet, prompt_version):
                 checks.append(result)
-                payload = {"type": "check", "index": len(checks), "verdict": result.verdict}
+                payload = {
+                    "type": "check",
+                    "index": len(checks),
+                    "verdict": result.verdict,
+                    "chutes_state": chutes_state["state"],
+                    "chutes_avg_latency": chutes_state["avg_latency"],
+                }
                 yield f"data: {json.dumps(payload)}\n\n"
         except Exception:
             # SSE headers are already sent by this point, so a real error

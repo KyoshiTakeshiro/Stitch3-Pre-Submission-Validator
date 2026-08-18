@@ -1164,41 +1164,19 @@ const CHUTES_STATUS_LABELS = {
   unknown: "Chutes: measuring response time…",
 };
 
-let chutesStatusPollId = null;
-
-async function refreshChutesBadge() {
-  try {
-    const resp = await fetch("/chutes-status");
-    if (!resp.ok) return;
-    const data = await resp.json();
-    chutesBadge.className = `status-badge chutes-badge status-${data.state}`;
-    chutesBadgeText.textContent = CHUTES_STATUS_LABELS[data.state] || data.state;
-    chutesBadge.style.display = "inline-flex";
-  } catch (_) {
-    // Non-critical -- leave whatever was last shown (or hidden) rather than
-    // blocking the actual evaluation over a badge failing to update.
-  }
-}
-
-function startChutesStatusPolling() {
-  // Show the neutral "measuring" state immediately rather than waiting on
-  // the first fetch to resolve, so the badge is visible from the instant
-  // the loading UI appears rather than popping in a beat later.
-  chutesBadge.className = "status-badge chutes-badge status-unknown";
-  chutesBadgeText.textContent = CHUTES_STATUS_LABELS.unknown;
+function updateChutesBadge(state) {
+  chutesBadge.className = `status-badge chutes-badge status-${state}`;
+  chutesBadgeText.textContent = CHUTES_STATUS_LABELS[state] || state;
   chutesBadge.style.display = "inline-flex";
-  refreshChutesBadge();
-  stopChutesStatusPolling();
-  // A full pessimistic pass can take well over a minute -- keep the badge
-  // live throughout the wait, not just as a one-time snapshot at the start.
-  chutesStatusPollId = setInterval(refreshChutesBadge, 4000);
 }
 
-function stopChutesStatusPolling() {
-  if (chutesStatusPollId) {
-    clearInterval(chutesStatusPollId);
-    chutesStatusPollId = null;
-  }
+function resetChutesBadge() {
+  // Show the neutral "measuring" state immediately, since the first real
+  // reading only arrives once this evaluation's own first check completes
+  // (see backend chutes_congestion_state -- it's scoped to this run's own
+  // call attempts, not a shared/global window, so there's nothing to show
+  // before that).
+  updateChutesBadge("unknown");
 }
 
 function updateCheckDots(index, verdict) {
@@ -1234,7 +1212,7 @@ async function runEvaluation() {
   loadingDiv.style.display = "flex";
   resultDiv.innerHTML = "";
   resetCheckDots();
-  startChutesStatusPolling();
+  resetChutesBadge();
 
   try {
     const resp = await fetch("/evaluate/stream", {
@@ -1271,6 +1249,7 @@ async function runEvaluation() {
         const payload = JSON.parse(part.slice(6));
         if (payload.type === "check") {
           updateCheckDots(payload.index, payload.verdict);
+          updateChutesBadge(payload.chutes_state);
           // A proxy/buffer between us and the server can deliver several
           // events in one burst instead of as they actually happen -- when
           // that happens, this loop processes them synchronously and the
@@ -1320,7 +1299,6 @@ async function runEvaluation() {
   } finally {
     evaluateBtn.disabled = false;
     loadingDiv.style.display = "none";
-    stopChutesStatusPolling();
   }
 }
 
