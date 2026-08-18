@@ -1410,29 +1410,32 @@ loadStats();
 
 // Running list of upstream Bitcast-validator-behavior notes worth surfacing to
 // miners. Add new entries here (e.g. from the daily fidelity-check routine's
-// draft banner snippets) -- each needs a stable unique id, the date it was
-// added (YYYY-MM-DD), a short bold title, a plain-English sentence or two, and
-// a url linking the title to the source commit on bitcast-network/bitcast-x.
-// Items older than UPDATE_ITEM_MAX_AGE_DAYS age out automatically, so nothing
-// needs to be manually removed later.
+// draft banner snippets) -- each needs a stable unique id, the source
+// commit's own authored date on GitHub (YYYY-MM-DD -- NOT the date this item
+// was added to the banner, which can lag behind by a day or more depending
+// on when the fidelity check runs and when someone reviews the draft), a
+// short bold title, a plain-English sentence or two, and a url linking the
+// title to that same source commit on bitcast-network/bitcast-x. Items older
+// than UPDATE_ITEM_MAX_AGE_DAYS (counted from that commit date) age out
+// automatically, so nothing needs to be manually removed later.
 const UPDATE_ITEMS = [
   {
     id: "2026-08-18-honest-reviews",
-    date: "2026-08-18",
+    date: "2026-08-17",
     title: "Honest reviews now allowed.",
     text: "Some campaigns ask for genuine product/service reviews. Previously, sounding negative or critical could fail the check. Now sentiment doesn't matter. A real, substantive review passes even if it's critical, as long as it's actually about the product.",
     url: "https://github.com/bitcast-network/bitcast-x/commit/afa0e749c39a71a872ef89cd6bdff2ce4d1b3dea",
   },
   {
     id: "2026-08-18-rank-cutoffs",
-    date: "2026-08-18",
+    date: "2026-08-17",
     title: "Rank cutoffs on some campaigns.",
     text: "Certain campaigns now cap how many creators can earn from them. If a campaign sets a member limit, only the highest-ranked creators (by influence) within that cap get counted, even if your tweet fully meets the brief.",
     url: "https://github.com/bitcast-network/bitcast-x/commit/65f56004a0f14f9fa3e49bf8ff4859b66ff660f7",
   },
   {
     id: "2026-08-18-deferred-scoring",
-    date: "2026-08-18",
+    date: "2026-08-17",
     title: "One bad tweet won't sink the batch.",
     text: "If the validator hits a temporary hiccup checking one tweet during final scoring, it now sets that tweet aside and keeps going, instead of risking everyone else's scoring in the same run.",
     url: "https://github.com/bitcast-network/bitcast-x/commit/c15f8a0c2b86a59889665e08f85c2503143249c6",
