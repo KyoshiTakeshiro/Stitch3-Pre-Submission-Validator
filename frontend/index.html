@@ -1467,7 +1467,6 @@ function initUpdateBanner() {
   let observer = null;
 
   function renderSummary() {
-    const unseenCount = activeItems.filter(item => !seenIds.includes(item.id)).length;
     // "Protocol" (not "Validator") avoids colliding with this tool's own
     // name, Stitch3 Validator -- "Bitcast Validator Updates" on a page
     // titled "Stitch3 Validator" could read as "this tool changed" instead
@@ -1478,11 +1477,10 @@ function initUpdateBanner() {
     const isMobile = window.innerWidth <= 480;
     const prefixWord = activeItems.length === 1 ? "Update:" : "Updates:";
     const summaryPrefix = isMobile ? prefixWord : `Bitcast Protocol ${prefixWord}`;
-    const summaryRest = unseenCount > 0
-      ? (activeItems.length === 1
-          ? ` ${activeItems[0].title.replace(/\.$/, "").toLowerCase()}.`
-          : ` ${unseenCount} new of ${activeItems.length} worth a look.`)
-      : ` ${activeItems.length} recent change${activeItems.length === 1 ? "" : "s"}.`;
+    // Always the plain "N recent changes" wording regardless of seen state --
+    // the "NEW" badges inside the details panel already carry the
+    // unseen/seen distinction, so the summary line doesn't need to.
+    const summaryRest = ` ${activeItems.length} recent change${activeItems.length === 1 ? "" : "s"}.`;
     summaryEl.innerHTML = `<span class="update-banner-prefix">${summaryPrefix}</span>${summaryRest}`;
   }
 
