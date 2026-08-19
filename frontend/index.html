@@ -224,7 +224,7 @@
     cursor: pointer;
     transition: color 0.15s ease, border-color 0.15s ease;
   }
-  .theme-toggle:hover { color: var(--gray-100); border-color: var(--border-accent); }
+  .theme-toggle:hover { color: var(--purple-light); border-color: var(--border-accent); }
   .theme-toggle svg { width: 17px; height: 17px; display: block; }
   .theme-toggle .icon-sun { display: none; }
   [data-theme="light"] .theme-toggle .icon-moon { display: none; }
@@ -232,44 +232,85 @@
 
   .intro { margin: 20px 0 28px; font-size: 15px; color: var(--gray-400); }
 
-  /* Muted, dismissible notice about upstream validator behavior changes --
-     deliberately understated (small text, thin border, no accent color)
-     since it's informational, not an alert. Collapsed detail by default so
-     it takes almost no vertical space unless the user opts in. */
-  .update-banner {
-    margin: 0 0 20px;
-    border: 1px solid var(--border-accent);
-    border-radius: var(--radius-pill);
-    background: var(--black-1);
-    overflow: hidden;
-  }
-  .update-banner:has(.update-banner-details[style*="block"]) { border-radius: var(--radius-control); }
-  .update-banner-row {
+  /* Update pill: same circular-button treatment as the theme toggle, sitting
+     just to its left, so upstream protocol updates get a fixed, always-
+     reachable entry point instead of taking up space in the page flow. */
+  .update-pill {
+    position: fixed;
+    top: 20px;
+    right: 66px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
+    margin: 0;
+    padding: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-  }
-  .update-banner-icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--purple-light); }
-  .update-banner-text { flex: 1; font-size: 12px; color: var(--gray-400); }
-  .update-banner-prefix { color: var(--purple-light); font-weight: 600; }
-  .update-banner-toggle {
-    margin: 0;
-    padding: 2px 8px;
-    font-size: 11px;
-    font-weight: 600;
-    border-radius: var(--radius-pill);
-    border: none;
-    background: var(--gradient-brand);
-    color: var(--text-on-brand);
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border-input);
+    background: var(--black-1);
+    color: var(--gray-400);
     cursor: pointer;
-    flex-shrink: 0;
+    transition: color 0.15s ease, border-color 0.15s ease;
   }
-  .update-banner-toggle:hover { filter: brightness(1.08); }
+  .update-pill:hover { color: var(--purple-light); border-color: var(--border-accent); }
+  .update-pill.has-open-panel { color: var(--purple-light); border-color: var(--border-accent); }
+  .update-pill svg { width: 16px; height: 16px; display: block; }
+  .update-pill-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-pill);
+    background: var(--purple);
+    border: 1.5px solid var(--black-1);
+    color: var(--text-on-brand);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .update-panel {
+    position: fixed;
+    top: 64px;
+    right: 20px;
+    z-index: 10;
+    width: 320px;
+    max-width: calc(100vw - 40px);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-control);
+    background: var(--black-1);
+    box-shadow: 0 8px 48px #0009, 0 0 64px #b882ff14;
+    overflow: hidden;
+  }
+  .update-panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-card);
+  }
+  .update-panel-title {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--gray-100);
+  }
+  .update-panel-subtitle {
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 400;
+    color: var(--gray-500);
+  }
   .update-banner-details {
     padding: 10px 14px;
-    border-top: 1px solid var(--border-card);
-    max-height: 230px;
+    max-height: 320px;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -718,16 +759,6 @@
     .intro { margin: 12px 0 16px; font-size: 14px; }
     .site-header { margin-bottom: 4px; }
     .site-footer { margin-top: 14px; padding-top: 10px; }
-    /* Pill radius only reads well on a single line -- once the longer
-       summary text wraps at this width, the fully-rounded ends started
-       eating into the text, so drop back to a normal rounded rect. */
-    .update-banner { border-radius: var(--radius-control); }
-    .update-banner:has(.update-banner-details[style*="block"]) { border-radius: var(--radius-control); }
-    .update-banner-row { padding: 8px 10px; gap: 6px; }
-    .update-banner-text { font-size: 11px; }
-    .update-banner-icon { width: 13px; height: 13px; }
-    .update-banner-toggle { padding: 2px 7px; font-size: 10px; }
-    .update-banner-details { padding: 8px 10px; }
     /* Fixed height:1000px (desktop) forces background-size:cover to zoom in
        drastically once width shrinks to mobile's narrower 220vw cap, cropping
        the glow's visible orb out of frame. Scale height down to roughly match
@@ -741,6 +772,17 @@
   <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
   <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
 </button>
+<button type="button" class="update-pill" id="update-pill" style="display:none;" aria-label="Bitcast protocol updates">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+  <span class="update-pill-badge" id="update-pill-badge" style="display:none;"></span>
+</button>
+<div class="update-panel" id="update-panel" style="display:none;">
+  <div class="update-panel-header">
+    <div class="update-panel-title">Bitcast Protocol Updates</div>
+    <div class="update-panel-subtitle">Recent changes to the Bitcast protocol that may affect you as a miner. Click a title to view its GitHub commit.</div>
+  </div>
+  <div class="update-banner-details" id="update-banner-details"></div>
+</div>
 <div class="page">
   <header class="site-header">
     <div class="header-logo" role="img" aria-label="Stitch3 Validator"></div>
@@ -768,15 +810,6 @@
   </div>
 
   <p class="intro">Choose your campaign brief, paste your draft tweet, and check if it would pass validator review before posting it on X.</p>
-
-  <div id="update-banner" class="update-banner" style="display:none;">
-    <div class="update-banner-row">
-      <svg class="update-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-      <span class="update-banner-text" id="update-banner-summary"></span>
-      <button type="button" class="update-banner-toggle">Details</button>
-    </div>
-    <div class="update-banner-details" id="update-banner-details" style="display:none;"></div>
-  </div>
 
   <div class="card">
     <label class="field-label">Ecosystem</label>
@@ -1411,6 +1444,20 @@ loadStats();
 // automatically, so nothing needs to be manually removed later.
 const UPDATE_ITEMS = [
   {
+    id: "2026-08-14-manual-tweet-submission",
+    date: "2026-08-14",
+    title: "Manual tweet submission on some campaigns.",
+    text: "Some campaigns no longer auto-detect your posts by scanning X. After publishing, you need to submit your tweet yourself (its link or ID) through Stitch3 for it to be counted and ranked.",
+    url: "https://github.com/bitcast-network/bitcast-x/commit/41552049b61f10fc7117e7c4c749aa7b597ff501",
+  },
+  {
+    id: "2026-08-18-campaign-eligibility-rank-overlap",
+    date: "2026-08-18",
+    title: "Campaign eligibility widened.",
+    text: "Your tweet now counts toward a campaign if you ranked in the top members list at any point during the campaign, not just at the exact moment you posted. A rank dip right after posting should no longer disqualify an otherwise-compliant tweet.",
+    url: "https://github.com/bitcast-network/bitcast-x/commit/ec4aed79fb1699c7dca06bfe1ab2833cadce57b7",
+  },
+  {
     id: "2026-08-18-honest-reviews",
     date: "2026-08-17",
     title: "Honest reviews now allowed.",
@@ -1441,13 +1488,13 @@ function initUpdateBanner() {
   const activeItems = UPDATE_ITEMS
     .filter(item => now - new Date(`${item.date}T00:00:00Z`).getTime() <= maxAgeMs)
     .sort((a, b) => b.date.localeCompare(a.date));
-  if (activeItems.length === 0) return; // nothing within the window -- banner stays hidden
+  if (activeItems.length === 0) return; // nothing within the window -- pill stays hidden
 
-  // No dismiss control -- the banner isn't closeable, it just stays present
+  // No dismiss control -- the pill isn't closeable, it just stays present
   // across sessions as long as any item is within its 7-day window. "Seen"
   // is tracked per-item instead, driven by actually scrolling an item into
-  // view inside the open details panel (see the IntersectionObserver below),
-  // not by a single blanket dismiss action.
+  // view inside the open panel (see the IntersectionObserver below), not by
+  // a single blanket dismiss action.
   let seenIds = [];
   try {
     seenIds = JSON.parse(localStorage.getItem("stitch3-seen-update-ids") || "[]");
@@ -1455,27 +1502,16 @@ function initUpdateBanner() {
     seenIds = [];
   }
 
-  const banner = document.getElementById("update-banner");
-  const summaryEl = document.getElementById("update-banner-summary");
+  const pill = document.getElementById("update-pill");
+  const badgeEl = document.getElementById("update-pill-badge");
+  const panel = document.getElementById("update-panel");
   const detailsEl = document.getElementById("update-banner-details");
   let observer = null;
 
-  function renderSummary() {
-    // "Protocol" (not "Validator") avoids colliding with this tool's own
-    // name, Stitch3 Validator -- "Bitcast Validator Updates" on a page
-    // titled "Stitch3 Validator" could read as "this tool changed" instead
-    // of "the real Bitcast protocol changed". Narrow screens drop "Bitcast
-    // Protocol" entirely -- the full phrase plus the rest of the sentence
-    // wraps awkwardly at mobile widths, and "Update(s):" alone still reads
-    // clearly right next to the bell icon.
-    const isMobile = window.innerWidth <= 480;
-    const prefixWord = activeItems.length === 1 ? "Update:" : "Updates:";
-    const summaryPrefix = isMobile ? prefixWord : `Bitcast Protocol ${prefixWord}`;
-    // Always the plain "N recent changes" wording regardless of seen state --
-    // the "NEW" badges inside the details panel already carry the
-    // unseen/seen distinction, so the summary line doesn't need to.
-    const summaryRest = ` ${activeItems.length} recent change${activeItems.length === 1 ? "" : "s"}.`;
-    summaryEl.innerHTML = `<span class="update-banner-prefix">${summaryPrefix}</span>${summaryRest}`;
+  function renderBadge() {
+    const unseenCount = activeItems.filter(item => !seenIds.includes(item.id)).length;
+    badgeEl.textContent = unseenCount;
+    badgeEl.style.display = unseenCount > 0 ? "flex" : "none";
   }
 
   function relativeDate(dateStr) {
@@ -1500,29 +1536,21 @@ function initUpdateBanner() {
     if (seenIds.includes(id)) return;
     seenIds.push(id);
     localStorage.setItem("stitch3-seen-update-ids", JSON.stringify(seenIds));
-    renderSummary();
+    renderBadge();
   }
 
-  renderSummary();
-  banner.style.display = "block";
+  function closePanel() {
+    panel.style.display = "none";
+    pill.classList.remove("has-open-panel");
+    if (observer) observer.disconnect();
+  }
 
-  let resizeTimer = null;
-  window.addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderSummary, 150);
-  });
-
-  banner.querySelector(".update-banner-toggle").addEventListener("click", () => {
-    const isOpen = detailsEl.style.display !== "none";
-    if (isOpen) {
-      detailsEl.style.display = "none";
-      if (observer) observer.disconnect();
-      return;
-    }
+  function openPanel() {
     // Re-render on every open (not just once) so items marked seen earlier
     // in this same session no longer show NEW the next time this opens.
     renderDetails();
-    detailsEl.style.display = "block";
+    panel.style.display = "block";
+    pill.classList.add("has-open-panel");
     if (observer) observer.disconnect();
     observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
@@ -1533,6 +1561,22 @@ function initUpdateBanner() {
       });
     }, { threshold: 0.6 });
     detailsEl.querySelectorAll("p[data-item-id]").forEach(p => observer.observe(p));
+  }
+
+  renderBadge();
+  pill.style.display = "flex";
+
+  pill.addEventListener("click", () => {
+    const isOpen = panel.style.display !== "none";
+    if (isOpen) {
+      closePanel();
+    } else {
+      openPanel();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".update-pill") && !e.target.closest(".update-panel")) closePanel();
   });
 }
 
