@@ -237,8 +237,18 @@ def _fetch_normalized_briefs() -> list[dict]:
     "access", uses a "pools" array (always length 1 in practice) instead of
     a single "pool" string, and "opens_at"/"closes_at" full timestamps
     instead of date-only "start_date"/"end_date" strings."""
-    resp = requests.get(BITCAST_CAMPAIGN_MANIFEST_ENDPOINT, timeout=10)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(BITCAST_CAMPAIGN_MANIFEST_ENDPOINT, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException:
+        # Bitcast's own API (not ours) -- surface this distinctly from a
+        # real bug here, since retrying in a few minutes is the actual fix,
+        # not something wrong with this tool. Confirmed live 2026-08-19:
+        # their ELB returned a fast 503 with no healthy backend target.
+        raise HTTPException(
+            status_code=502,
+            detail="Bitcast's campaign API is temporarily unavailable. Please try again in a few minutes.",
+        )
     campaigns = resp.json().get("campaigns", [])
     briefs = []
     for c in campaigns:

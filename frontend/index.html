@@ -459,6 +459,16 @@
   .post-x-btn, .retry-btn { border-color: var(--border-accent); color: var(--purple-light); }
   .post-x-btn:hover, .retry-btn:hover { background: #b882ff1f; box-shadow: var(--glow-accent-soft); }
 
+  .load-error {
+    padding: 14px 16px;
+    border-radius: var(--radius-control);
+    background: #f871710f;
+    border: 1px solid #f8717166;
+    color: var(--red);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
   #loading {
     margin-top: 26px;
     display: flex;
@@ -811,7 +821,7 @@
 
   <p class="intro">Choose your campaign brief, paste your draft tweet, and check if it would pass validator review before posting it on X.</p>
 
-  <div class="card">
+  <div class="card" id="main-card">
     <label class="field-label">Ecosystem</label>
     <div class="ecosystem-tabs" id="ecosystem-tabs"></div>
 
@@ -960,6 +970,20 @@ async function loadBriefs() {
       briefs = window.__PRELOADED_BRIEFS__;
     } else {
       const resp = await fetch("/briefs");
+      if (!resp.ok) {
+        // main.py returns a real JSON {detail: "..."} on a Bitcast API
+        // outage (502) rather than a bare 500, so this is normally the
+        // exact "try again in a few minutes" message, not a generic one.
+        let detail = "Failed to load campaign briefs. Please try again in a few minutes.";
+        try {
+          const err = await resp.json();
+          detail = err.detail || detail;
+        } catch (_) {
+          // Non-JSON error body (e.g. an nginx/proxy error page) -- fall
+          // back to the generic message above.
+        }
+        throw new Error(detail);
+      }
       briefs = await resp.json();
     }
     pools = [...new Set(briefs.map(b => b.pool))].sort((a, b) => {
@@ -988,7 +1012,17 @@ async function loadBriefs() {
 
     loadBrandOverviews();
   } catch (e) {
-    selectValue.textContent = "Failed to load briefs";
+    // Replace the whole card rather than leaving a partially-broken UI
+    // (empty ecosystem tabs, a live-looking but non-functional tweet box)
+    // -- if briefs failed to load there's genuinely nothing to check yet.
+    const message = e instanceof Error && e.message
+      ? e.message
+      : "Failed to load campaign briefs. Please try again in a few minutes.";
+    document.getElementById("main-card").innerHTML = `
+      <div class="load-error">${message}</div>
+      <button type="button" class="retry-btn" id="briefs-retry-btn">Try again</button>
+    `;
+    document.getElementById("briefs-retry-btn").addEventListener("click", () => location.reload());
   }
 }
 
