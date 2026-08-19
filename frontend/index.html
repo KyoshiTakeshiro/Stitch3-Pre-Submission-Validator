@@ -282,7 +282,15 @@
     top: 64px;
     right: 20px;
     z-index: 10;
-    width: 320px;
+    /* 320px floor (unchanged from before); widens toward the main card's
+       right edge as the viewport grows past ~1368px, capped at 480px so
+       item text doesn't stretch into unreadably long lines on an ultrawide
+       monitor. See project plan "drifting-coalescing-nygaard" for the math
+       -- .page is centered and capped at 640px, so once it's pinned there
+       its right edge sits at 50vw + 320px; this panel is anchored to the
+       viewport's right edge (right: 20px), not the card, so the calc keeps
+       a 24px gap between the panel's left edge and the card's right edge. */
+    width: clamp(320px, calc(50vw - 364px), 480px);
     max-width: calc(100vw - 40px);
     border: 1px solid var(--border-accent);
     border-radius: var(--radius-control);
