@@ -173,6 +173,13 @@ def call_chutes(prompt: str, latencies: list[float]) -> str:
         "max_tokens": 4096,
     }
 
+    # A 429 means Chutes is actively telling us to slow down -- retrying in
+    # 1-2s (the normal backoff, meant for transient timeouts/connection
+    # blips) just gets rejected again. Back off longer specifically for
+    # that case. No Retry-After handling yet -- unconfirmed whether Chutes
+    # sends that header; revisit if/when that's checked against a real 429.
+    RATE_LIMIT_BACKOFF_SECONDS = 8
+
     last_error = None
     for attempt in range(3):
         start = time.time()
@@ -185,7 +192,12 @@ def call_chutes(prompt: str, latencies: list[float]) -> str:
             latencies.append(time.time() - start)
             last_error = e
             if attempt < 2:
-                time.sleep(2 ** attempt)
+                is_rate_limited = (
+                    isinstance(e, requests.HTTPError)
+                    and e.response is not None
+                    and e.response.status_code == 429
+                )
+                time.sleep(RATE_LIMIT_BACKOFF_SECONDS if is_rate_limited else 2 ** attempt)
     raise last_error
 
 
