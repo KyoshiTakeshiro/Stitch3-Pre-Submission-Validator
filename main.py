@@ -8,6 +8,7 @@ optimistic multi-check strategy that real Bitcast validators use.
 
 import hashlib
 import json
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -38,6 +39,8 @@ CHUTES_ENDPOINT = "https://llm.chutes.ai/v1/chat/completions"
 CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
 NUM_LLM_CHECKS = 3
 MODEL = "Qwen/Qwen3-32B"
+
+LOGGER = logging.getLogger("stitch3_validator")
 
 app = FastAPI(title="Stitch3 Validator")
 app.add_middleware(
@@ -413,6 +416,10 @@ def evaluate(req: EvaluateRequest, request: Request):
         # call_chutes() already retries 3x internally -- reaching here means
         # Chutes itself is timing out/erroring past that budget. Surface a
         # real explanation instead of letting the raw exception 500 out.
+        # Log it too -- this used to be swallowed with zero server-side
+        # trace, making a real Chutes-side failure indistinguishable from
+        # "never happened" when checking journalctl after the fact.
+        LOGGER.exception("evaluate() failed for brief=%s", req.brief_id)
         raise HTTPException(
             status_code=502,
             detail="The evaluation service is currently slow or unavailable. Please try again in a moment.",
@@ -460,7 +467,12 @@ def evaluate_stream(req: EvaluateRequest, request: Request):
             # that budget, not a transient blip. Without this, the raw
             # exception used to crash the stream silently and the frontend
             # fell back to a generic "took too long" message that hid the
-            # real cause.
+            # real cause. Also log it -- uvicorn's access log shows this
+            # request as a plain "200 OK" either way (the SSE stream itself
+            # succeeded even though a check inside it failed), so without an
+            # explicit log line here there was zero server-side trace of
+            # which requests actually failed internally.
+            LOGGER.exception("evaluate_stream() failed for brief=%s", req.brief_id)
             error_payload = {
                 "type": "error",
                 "detail": "The evaluation service is currently slow or unavailable. Please try again in a moment.",
